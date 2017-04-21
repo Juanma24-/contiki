@@ -77,11 +77,11 @@ static struct etimer et;
 static struct ctimer ct;
 /*---------------------------------------------------------------------------*/
 /* Parent RSSI functionality */
-#if CC26XX_WEB_DEMO_READ_PARENT_RSSI
+
 static struct uip_icmp6_echo_reply_notification echo_reply_notification;
 static struct etimer echo_request_timer;
 int def_rt_rssi = 0;
-#endif
+
 /*---------------------------------------------------------------------------*/
 process_event_t cc26xx_web_demo_publish_event;
 process_event_t cc26xx_web_demo_config_loaded_event;
@@ -366,7 +366,6 @@ sensor_readings_handler(char *key, int key_len, char *val, int val_len)
   return HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
 }
 /*---------------------------------------------------------------------------*/
-#if CC26XX_WEB_DEMO_READ_PARENT_RSSI
 static int
 ping_interval_post_handler(char *key, int key_len, char *val, int val_len)
 {
@@ -389,12 +388,10 @@ ping_interval_post_handler(char *key, int key_len, char *val, int val_len)
 
   return HTTPD_SIMPLE_POST_HANDLER_OK;
 }
-#endif
 /*---------------------------------------------------------------------------*/
 HTTPD_SIMPLE_POST_HANDLER(sensor, sensor_readings_handler);
 HTTPD_SIMPLE_POST_HANDLER(defaults, defaults_post_handler);
 
-#if CC26XX_WEB_DEMO_READ_PARENT_RSSI
 HTTPD_SIMPLE_POST_HANDLER(ping_interval, ping_interval_post_handler);
 /*---------------------------------------------------------------------------*/
 static void
@@ -416,7 +413,6 @@ ping_parent(void)
   uip_icmp6_send(uip_ds6_defrt_choose(), ICMP6_ECHO_REQUEST, 0,
                  CC26XX_WEB_DEMO_ECHO_REQ_PAYLOAD_LEN);
 }
-#endif
 /*---------------------------------------------------------------------------*/
 static void
 get_batmon_reading(void *data)
@@ -864,14 +860,12 @@ PROCESS_THREAD(cc26xx_web_demo_process, ev, data)
   httpd_simple_register_post_handler(&sensor_handler);
   httpd_simple_register_post_handler(&defaults_handler);
 
-#if CC26XX_WEB_DEMO_READ_PARENT_RSSI
   httpd_simple_register_post_handler(&ping_interval_handler);
 
   def_rt_rssi = 0x8000000;
   uip_icmp6_echo_reply_callback_add(&echo_reply_notification,
                                     echo_reply_handler);
   etimer_set(&echo_request_timer, CC26XX_WEB_DEMO_NET_CONNECT_PERIODIC);
-#endif
 
   etimer_set(&et, CC26XX_WEB_DEMO_NET_CONNECT_PERIODIC);
 
@@ -888,7 +882,6 @@ PROCESS_THREAD(cc26xx_web_demo_process, ev, data)
       }
     }
 
-#if CC26XX_WEB_DEMO_READ_PARENT_RSSI
     if(ev == PROCESS_EVENT_TIMER && etimer_expired(&echo_request_timer)) {
       if(uip_ds6_get_global(ADDR_PREFERRED) == NULL) {
         etimer_set(&echo_request_timer, CC26XX_WEB_DEMO_NET_CONNECT_PERIODIC);
@@ -897,7 +890,6 @@ PROCESS_THREAD(cc26xx_web_demo_process, ev, data)
         etimer_set(&echo_request_timer, cc26xx_web_demo_config.def_rt_ping_interval);
       }
     }
-#endif
 
     if(ev == sensors_event && data == CC26XX_WEB_DEMO_SENSOR_READING_TRIGGER) {
       if((CC26XX_WEB_DEMO_SENSOR_READING_TRIGGER)->value(

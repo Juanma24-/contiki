@@ -65,11 +65,6 @@
 
 /*---------------------------------------------------------------------------*/
 /* Active probing of RSSI from our preferred parent */
-#if  CC26XX_WEB_DEMO_MQTT_CLIENT
-#define CC26XX_WEB_DEMO_READ_PARENT_RSSI 1
-#else
-#define CC26XX_WEB_DEMO_READ_PARENT_RSSI 0
-#endif
 
 #define CC26XX_WEB_DEMO_RSSI_MEASURE_INTERVAL_MAX 86400 /* secs: 1 day */
 #define CC26XX_WEB_DEMO_RSSI_MEASURE_INTERVAL_MIN     5 /* secs */
@@ -81,12 +76,9 @@
 /* Payload length of ICMPv6 echo requests used to measure RSSI with def rt */
 #define CC26XX_WEB_DEMO_ECHO_REQ_PAYLOAD_LEN   20
 
-#if BOARD_SENSORTAG
 /* Force an MQTT publish on sensor event */
 #define CC26XX_WEB_DEMO_MQTT_PUBLISH_TRIGGER &reed_relay_sensor
-#else
-#define CC26XX_WEB_DEMO_MQTT_PUBLISH_TRIGGER &button_down_sensor
-#endif
+
 
 #define CC26XX_WEB_DEMO_STATUS_LED LEDS_GREEN
 /*---------------------------------------------------------------------------*/
@@ -95,11 +87,7 @@
 /*---------------------------------------------------------------------------*/
 /* Default configuration values */
 #define CC26XX_WEB_DEMO_DEFAULT_ORG_ID              "Mosquitto"
-#if CPU_FAMILY_CC13XX
-#define CC26XX_WEB_DEMO_DEFAULT_TYPE_ID             "cc13xx"
-#else
 #define CC26XX_WEB_DEMO_DEFAULT_TYPE_ID             "Sensortag_MQTT"
-#endif
 #define AUTH_TOKEN			            			          "Password"
 #define CC26XX_WEB_DEMO_DEFAULT_EVENT_TYPE_ID       "status"
 #define CC26XX_WEB_DEMO_DEFAULT_SUBSCRIBE_CMD_TYPE  "+"
