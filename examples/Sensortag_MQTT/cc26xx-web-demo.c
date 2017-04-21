@@ -46,7 +46,6 @@
 #include "net/ipv6/sicslowpan.h"
 #include "button-sensor.h"
 #include "batmon-sensor.h"
-#include "httpd-simple.h"
 #include "cc26xx-web-demo.h"
 #include "mqtt-client.h"
 
@@ -319,78 +318,7 @@ cc26xx_web_demo_restore_defaults(void)
   leds_off(LEDS_ALL);
 }
 /*---------------------------------------------------------------------------*/
-static int
-defaults_post_handler(char *key, int key_len, char *val, int val_len)
-{
-  if(key_len != strlen("defaults") ||
-     strncasecmp(key, "defaults", strlen("defaults")) != 0) {
-    /* Not ours */
-    return HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  }
 
-  cc26xx_web_demo_restore_defaults();
-
-  return HTTPD_SIMPLE_POST_HANDLER_OK;
-}
-/*---------------------------------------------------------------------------*/
-static int
-sensor_readings_handler(char *key, int key_len, char *val, int val_len)
-{
-  cc26xx_web_demo_sensor_reading_t *reading = NULL;
-  int rv;
-
-  for(reading = list_head(sensor_list);
-      reading != NULL;
-      reading = list_item_next(reading)) {
-    if(key_len == strlen(reading->form_field) &&
-       strncmp(reading->form_field, key, strlen(key)) == 0) {
-
-      rv = atoi(val);
-
-      /* Be pedantic: only accept 0 and 1, not just any non-zero value */
-      if(rv == 0) {
-        reading->publish = 0;
-        snprintf(reading->converted, CC26XX_WEB_DEMO_CONVERTED_LEN, "\"N/A\"");
-      } else if(rv == 1) {
-        reading->publish = 1;
-      } else {
-        return HTTPD_SIMPLE_POST_HANDLER_ERROR;
-      }
-
-      return HTTPD_SIMPLE_POST_HANDLER_OK;
-    }
-  }
-
-  return HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-}
-/*---------------------------------------------------------------------------*/
-static int
-ping_interval_post_handler(char *key, int key_len, char *val, int val_len)
-{
-  int rv = 0;
-
-  if(key_len != strlen("ping_interval") ||
-     strncasecmp(key, "ping_interval", strlen("ping_interval")) != 0) {
-    /* Not ours */
-    return HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  }
-
-  rv = atoi(val);
-
-  if(rv < CC26XX_WEB_DEMO_RSSI_MEASURE_INTERVAL_MIN ||
-     rv > CC26XX_WEB_DEMO_RSSI_MEASURE_INTERVAL_MAX) {
-    return HTTPD_SIMPLE_POST_HANDLER_ERROR;
-  }
-
-  cc26xx_web_demo_config.def_rt_ping_interval = rv * CLOCK_SECOND;
-
-  return HTTPD_SIMPLE_POST_HANDLER_OK;
-}
-/*---------------------------------------------------------------------------*/
-HTTPD_SIMPLE_POST_HANDLER(sensor, sensor_readings_handler);
-HTTPD_SIMPLE_POST_HANDLER(defaults, defaults_post_handler);
-
-HTTPD_SIMPLE_POST_HANDLER(ping_interval, ping_interval_post_handler);
 /*---------------------------------------------------------------------------*/
 static void
 echo_reply_handler(uip_ipaddr_t *source, uint8_t ttl, uint8_t *data,
@@ -833,9 +761,6 @@ PROCESS_THREAD(cc26xx_web_demo_process, ev, data)
   cc26xx_web_demo_config_loaded_event = process_alloc_event();
   cc26xx_web_demo_load_config_defaults = process_alloc_event();
 
-  /* Start all other (enabled) processes first */
-  process_start(&httpd_simple_process, NULL);                                                                                       //Comienza Proceso HTTP (página Web)
-
   process_start(&mqtt_client_process, NULL);                                                                                        //Inicia el cliene MQTT
 
   /*
@@ -854,11 +779,6 @@ PROCESS_THREAD(cc26xx_web_demo_process, ev, data)
   process_post(PROCESS_BROADCAST, cc26xx_web_demo_config_loaded_event, NULL);
 
   init_sensor_readings();                                                                                     //Inicia lectura de Sensores
-
-  httpd_simple_register_post_handler(&sensor_handler);
-  httpd_simple_register_post_handler(&defaults_handler);
-
-  httpd_simple_register_post_handler(&ping_interval_handler);
 
   def_rt_rssi = 0x8000000;
   uip_icmp6_echo_reply_callback_add(&echo_reply_notification,
@@ -899,8 +819,6 @@ PROCESS_THREAD(cc26xx_web_demo_process, ev, data)
 
         process_post(PROCESS_BROADCAST, cc26xx_web_demo_publish_event, NULL);
       }
-    } else if(ev == httpd_simple_event_new_config) {
-      save_config();
     } else if(ev == sensors_event && data == &bmp_280_sensor) {
       get_bmp_reading();
     } else if(ev == sensors_event && data == &opt_3001_sensor) {
