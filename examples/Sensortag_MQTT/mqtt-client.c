@@ -49,7 +49,6 @@
 #include "cc26xx-web-demo.h"
 #include "dev/leds.h"
 #include "mqtt-client.h"
-#include "httpd-simple.h"
 
 #include <string.h>
 #include <strings.h>
@@ -175,228 +174,6 @@ new_net_config(void)                                                            
   mqtt_disconnect(&conn);
 }
 /*---------------------------------------------------------------------------*/
-static int
-org_id_post_handler(char *key, int key_len, char *val, int val_len)
-{
-  int rv = HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  if(key_len != strlen("org_id") ||
-     strncasecmp(key, "org_id", strlen("org_id")) != 0) {
-    /* Not ours */
-    return HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  }
-
-  if(val_len > MQTT_CLIENT_CONFIG_ORG_ID_LEN) {
-    /* Ours but bad value */
-    rv = HTTPD_SIMPLE_POST_HANDLER_ERROR;
-  } else {
-    memset(conf->org_id, 0, MQTT_CLIENT_CONFIG_ORG_ID_LEN);
-    memcpy(conf->org_id, val, val_len);
-
-    rv = HTTPD_SIMPLE_POST_HANDLER_OK;
-  }
-
-  new_net_config();
-
-  return rv;
-}
-/*---------------------------------------------------------------------------*/
-static int
-type_id_post_handler(char *key, int key_len, char *val, int val_len)
-{
-  int rv = HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  if(key_len != strlen("type_id") ||
-     strncasecmp(key, "type_id", strlen("type_id")) != 0) {
-    /* Not ours */
-    return HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  }
-
-  if(val_len > MQTT_CLIENT_CONFIG_TYPE_ID_LEN) {
-    /* Ours but bad value */
-    rv = HTTPD_SIMPLE_POST_HANDLER_ERROR;
-  } else {
-    memset(conf->type_id, 0, MQTT_CLIENT_CONFIG_TYPE_ID_LEN);
-    memcpy(conf->type_id, val, val_len);
-
-    rv = HTTPD_SIMPLE_POST_HANDLER_OK;
-  }
-
-  new_net_config();
-
-  return rv;
-}
-/*---------------------------------------------------------------------------*/
-static int
-event_type_id_post_handler(char *key, int key_len, char *val, int val_len)
-{
-  int rv = HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  if(key_len != strlen("event_type_id") ||
-     strncasecmp(key, "event_type_id", strlen("event_type_id")) != 0) {
-    /* Not ours */
-    return HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  }
-
-  if(val_len > MQTT_CLIENT_CONFIG_EVENT_TYPE_ID_LEN) {
-    /* Ours but bad value */
-    rv = HTTPD_SIMPLE_POST_HANDLER_ERROR;
-  } else {
-    memset(conf->event_type_id, 0, MQTT_CLIENT_CONFIG_EVENT_TYPE_ID_LEN);
-    memcpy(conf->event_type_id, val, val_len);
-
-    rv = HTTPD_SIMPLE_POST_HANDLER_OK;
-  }
-
-  new_net_config();
-
-  return rv;
-}
-/*---------------------------------------------------------------------------*/
-static int
-cmd_type_post_handler(char *key, int key_len, char *val, int val_len)
-{
-  int rv = HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  if(key_len != strlen("cmd_type") ||
-     strncasecmp(key, "cmd_type", strlen("cmd_type")) != 0) {
-    /* Not ours */
-    return HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  }
-
-  if(val_len > MQTT_CLIENT_CONFIG_CMD_TYPE_LEN) {
-    /* Ours but bad value */
-    rv = HTTPD_SIMPLE_POST_HANDLER_ERROR;
-  } else {
-    memset(conf->cmd_type, 0, MQTT_CLIENT_CONFIG_CMD_TYPE_LEN);
-    memcpy(conf->cmd_type, val, val_len);
-
-    rv = HTTPD_SIMPLE_POST_HANDLER_OK;
-  }
-
-  new_net_config();
-
-  return rv;
-}
-/*---------------------------------------------------------------------------*/
-static int
-auth_token_post_handler(char *key, int key_len, char *val, int val_len)
-{
-  int rv = HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  if(key_len != strlen("auth_token") ||
-     strncasecmp(key, "auth_token", strlen("auth_token")) != 0) {
-    /* Not ours */
-    return HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  }
-
-  if(val_len > MQTT_CLIENT_CONFIG_AUTH_TOKEN_LEN) {
-    /* Ours but bad value */
-    rv = HTTPD_SIMPLE_POST_HANDLER_ERROR;
-  } else {
-    memset(conf->auth_token, 0, MQTT_CLIENT_CONFIG_AUTH_TOKEN_LEN);
-    memcpy(conf->auth_token, val, val_len);
-
-    rv = HTTPD_SIMPLE_POST_HANDLER_OK;
-  }
-
-  new_net_config();
-
-  return rv;
-}
-/*---------------------------------------------------------------------------*/
-static int
-interval_post_handler(char *key, int key_len, char *val, int val_len)
-{
-  int rv = 0;
-
-  if(key_len != strlen("interval") ||
-     strncasecmp(key, "interval", strlen("interval")) != 0) {
-    /* Not ours */
-    return HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  }
-
-  rv = atoi(val);
-
-  if(rv < MQTT_CLIENT_PUBLISH_INTERVAL_MIN ||
-     rv > MQTT_CLIENT_PUBLISH_INTERVAL_MAX) {
-    return HTTPD_SIMPLE_POST_HANDLER_ERROR;
-  }
-
-  conf->pub_interval = rv * CLOCK_SECOND;
-
-  return HTTPD_SIMPLE_POST_HANDLER_OK;
-}
-/*---------------------------------------------------------------------------*/
-static int
-port_post_handler(char *key, int key_len, char *val, int val_len)
-{
-  int rv = 0;
-
-  if(key_len != strlen("broker_port") ||
-     strncasecmp(key, "broker_port", strlen("broker_port")) != 0) {
-    /* Not ours */
-    return HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  }
-
-  rv = atoi(val);
-
-  if(rv <= 65535 && rv > 0) {
-    conf->broker_port = rv;
-  } else {
-    return HTTPD_SIMPLE_POST_HANDLER_ERROR;
-  }
-
-  new_net_config();
-
-  return HTTPD_SIMPLE_POST_HANDLER_OK;
-}
-/*---------------------------------------------------------------------------*/
-static int
-ip_addr_post_handler(char *key, int key_len, char *val, int val_len)
-{
-  int rv = HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-
-  if(key_len != strlen("broker_ip") ||
-     strncasecmp(key, "broker_ip", strlen("broker_ip")) != 0) {
-    /* Not ours */
-    return HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  }
-
-  if(val_len > MQTT_CLIENT_CONFIG_IP_ADDR_STR_LEN) {
-    /* Ours but bad value */
-    rv = HTTPD_SIMPLE_POST_HANDLER_ERROR;
-  } else {
-    memset(conf->broker_ip, 0, MQTT_CLIENT_CONFIG_IP_ADDR_STR_LEN);
-    memcpy(conf->broker_ip, val, val_len);
-
-    rv = HTTPD_SIMPLE_POST_HANDLER_OK;
-  }
-
-  new_net_config();
-
-  return rv;
-}
-/*---------------------------------------------------------------------------*/
-static int
-reconnect_post_handler(char *key, int key_len, char *val, int val_len)
-{
-  if(key_len != strlen("reconnect") ||
-     strncasecmp(key, "reconnect", strlen("reconnect")) != 0) {
-    /* Not ours */
-    return HTTPD_SIMPLE_POST_HANDLER_UNKNOWN;
-  }
-
-  new_net_config();
-
-  return HTTPD_SIMPLE_POST_HANDLER_OK;
-}
-/*---------------------------------------------------------------------------*/
-HTTPD_SIMPLE_POST_HANDLER(org_id, org_id_post_handler);
-HTTPD_SIMPLE_POST_HANDLER(type_id, type_id_post_handler);
-HTTPD_SIMPLE_POST_HANDLER(event_type_id, event_type_id_post_handler);
-HTTPD_SIMPLE_POST_HANDLER(cmd_type, cmd_type_post_handler);
-HTTPD_SIMPLE_POST_HANDLER(auth_token, auth_token_post_handler);
-HTTPD_SIMPLE_POST_HANDLER(ip_addr, ip_addr_post_handler);
-HTTPD_SIMPLE_POST_HANDLER(port, port_post_handler);
-HTTPD_SIMPLE_POST_HANDLER(interval, interval_post_handler);
-HTTPD_SIMPLE_POST_HANDLER(reconnect, reconnect_post_handler);
-/*---------------------------------------------------------------------------*/
 static void
 pub_handler(const char *topic, uint16_t topic_len, const uint8_t *chunk,
             uint16_t chunk_len)
@@ -424,7 +201,6 @@ pub_handler(const char *topic, uint16_t topic_len, const uint8_t *chunk,
     return;
   }
 
-#if BOARD_SENSORTAG
   if(strncmp(&topic[10], "buzz", 4) == 0) {
     if(chunk[0] == '1') {
       buzzer_start(1000);
@@ -433,7 +209,7 @@ pub_handler(const char *topic, uint16_t topic_len, const uint8_t *chunk,
     }
     return;
   }
-#endif
+
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -597,20 +373,7 @@ init_config()
 
   return 1;
 }
-/*---------------------------------------------------------------------------*/
-static void
-register_http_post_handlers(void)
-{
-  httpd_simple_register_post_handler(&org_id_handler);
-  httpd_simple_register_post_handler(&type_id_handler);
-  httpd_simple_register_post_handler(&event_type_id_handler);
-  httpd_simple_register_post_handler(&cmd_type_handler);
-  httpd_simple_register_post_handler(&auth_token_handler);
-  httpd_simple_register_post_handler(&interval_handler);
-  httpd_simple_register_post_handler(&port_handler);
-  httpd_simple_register_post_handler(&ip_addr_handler);
-  httpd_simple_register_post_handler(&reconnect_handler);
-}
+
 /*---------------------------------------------------------------------------*/
                                                                                     //REALIZA LA SUBCRIPCIÓN A UN TOPIC PREVIAMENTE PREPARADO EN 
                                                                                     //CONSTRUCT_SUB_TOPIC.
@@ -879,8 +642,6 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
     PROCESS_EXIT();
   }
 
-  register_http_post_handlers();
-
   update_config();
 
   /* Main loop */
@@ -893,15 +654,6 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
         connect_attempt = 1;
         state = MQTT_CLIENT_STATE_REGISTERED;
       }
-    }
-
-    if(ev == httpd_simple_event_new_config) {
-      /*
-       * Schedule next pass in a while. When HTTPD sends us this event, it is
-       * also in the process of sending the config page. Wait a little before
-       * reconnecting, so as to not cause congestion.
-       */
-      etimer_set(&publish_periodic_timer, NEW_CONFIG_WAIT_INTERVAL);
     }
 
     if((ev == PROCESS_EVENT_TIMER && data == &publish_periodic_timer) ||
