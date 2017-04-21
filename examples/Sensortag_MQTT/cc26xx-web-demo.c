@@ -175,7 +175,6 @@ static void
 save_config()
 {
   /* Dump current running config to flash */
-#if BOARD_SENSORTAG || BOARD_LAUNCHPAD
   int rv;
   cc26xx_web_demo_sensor_reading_t *reading = NULL;
 
@@ -212,13 +211,11 @@ save_config()
   }
 
   ext_flash_close();
-#endif
 }
 /*---------------------------------------------------------------------------*/
 static void
 load_config()
 {
-#if BOARD_SENSORTAG || BOARD_LAUNCHPAD
   /* Read from flash into a temp buffer */
   cc26xx_web_demo_config_t tmp_cfg;
   cc26xx_web_demo_sensor_reading_t *reading = NULL;
@@ -255,7 +252,6 @@ load_config()
       snprintf(reading->converted, CC26XX_WEB_DEMO_CONVERTED_LEN, "\"N/A\"");
     }
   }
-#endif
 }
 /*---------------------------------------------------------------------------*/
 /* Don't start everything here, we need to dictate order of initialisation */
@@ -466,8 +462,6 @@ get_batmon_reading(void *data)
 
   ctimer_set(&batmon_timer, next, get_batmon_reading, NULL);
 }
-/*---------------------------------------------------------------------------*/
-#if BOARD_SENSORTAG
 /*---------------------------------------------------------------------------*/
 static void
 compare_and_update(cc26xx_web_demo_sensor_reading_t *reading)
@@ -797,7 +791,6 @@ init_mpu_reading(void *data)
     ctimer_set(&mpu_timer, CLOCK_SECOND, init_mpu_reading, NULL);
   }
 }
-#endif
 /*---------------------------------------------------------------------------*/
 static void
 init_sensor_readings(void)
@@ -808,13 +801,11 @@ init_sensor_readings(void)
    */
   get_batmon_reading(NULL);
 
-#if BOARD_SENSORTAG
   init_bmp_reading(NULL);
   init_light_reading(NULL);
   init_hdc_reading(NULL);
   init_tmp_reading(NULL);
   init_mpu_reading(NULL);
-#endif /* BOARD_SENSORTAG */
 
   return;
 }
@@ -827,7 +818,6 @@ init_sensors(void)
   list_add(sensor_list, &batmon_volt_reading);
   SENSORS_ACTIVATE(batmon_sensor);
 
-#if BOARD_SENSORTAG
   list_add(sensor_list, &bmp_pres_reading);
   list_add(sensor_list, &bmp_temp_reading);
 
@@ -847,7 +837,6 @@ init_sensors(void)
   list_add(sensor_list, &mpu_gyro_z_reading);
 
   SENSORS_ACTIVATE(reed_relay_sensor);
-#endif
 }
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(cc26xx_web_demo_process, ev, data)
@@ -947,7 +936,6 @@ PROCESS_THREAD(cc26xx_web_demo_process, ev, data)
       }
     } else if(ev == httpd_simple_event_new_config) {
       save_config();
-#if BOARD_SENSORTAG
     } else if(ev == sensors_event && data == &bmp_280_sensor) {
       get_bmp_reading();
     } else if(ev == sensors_event && data == &opt_3001_sensor) {
@@ -958,7 +946,6 @@ PROCESS_THREAD(cc26xx_web_demo_process, ev, data)
       get_tmp_reading();
     } else if(ev == sensors_event && data == &mpu_9250_sensor) {
       get_mpu_reading();
-#endif
     }
 
     PROCESS_YIELD();
