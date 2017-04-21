@@ -52,7 +52,6 @@
 #include "dev/leds.h"
 #include "sys/process.h"
 #include "mqtt-client.h"
-#include "net-uart.h"
 
 #include <stdint.h>
 /*---------------------------------------------------------------------------*/
@@ -154,7 +153,6 @@ typedef struct cc26xx_web_demo_config_s {
   uint32_t sensors_bitmap;
   int def_rt_ping_interval;
   mqtt_client_config_t mqtt_config;
-  net_uart_config_t net_uart;
 } cc26xx_web_demo_config_t;
 
 extern cc26xx_web_demo_config_t cc26xx_web_demo_config;

@@ -44,7 +44,6 @@
 #include "lib/list.h"
 #include "cc26xx-web-demo.h"
 #include "mqtt-client.h"
-#include "net-uart.h"
 
 #include <stdint.h>
 #include <string.h>
@@ -216,18 +215,6 @@ static page_t http_dev_cfg_page = {
   generate_config,
 };
 
-#if CC26XX_WEB_DEMO_NET_UART
-static char generate_net_uart_config(struct httpd_state *s);
-
-static page_t http_net_cfg_page = {
-  NULL,
-  "netu.html",
-  "Net-UART Config",
-  generate_net_uart_config,
-};
-#endif
-
-#if CC26XX_WEB_DEMO_MQTT_CLIENT
 static char generate_mqtt_config(struct httpd_state *s);
 
 static page_t http_mqtt_cfg_page = {
@@ -236,7 +223,6 @@ static page_t http_mqtt_cfg_page = {
   "MQTT/IBM Cloud Config",
   generate_mqtt_config,
 };
-#endif
 /*---------------------------------------------------------------------------*/
 #define IBM_QUICKSTART_LINK_LEN 128
 static char http_mqtt_a[IBM_QUICKSTART_LINK_LEN];
@@ -410,11 +396,8 @@ PT_THREAD(generate_top_matter(struct httpd_state *s, const char *title,
                    enqueue_chunk(s, 0, " | [ <a href=\"%s\">%s</a> ]",
                                  s->page->filename, s->page->title));
   }
-
-#if CC26XX_WEB_DEMO_MQTT_CLIENT
   PT_WAIT_THREAD(&s->top_matter_pt,
                  enqueue_chunk(s, 0, " | %s", http_mqtt_a));
-#endif
   PT_WAIT_THREAD(&s->top_matter_pt,
                  enqueue_chunk(s, 0, "</p>" SECTION_CLOSE));
 
@@ -576,7 +559,7 @@ PT_THREAD(generate_config(struct httpd_state *s))
                  enqueue_chunk(s, 0, "</form>"));
 
   /* RSSI measurements */
-#if CC26XX_WEB_DEMO_READ_PARENT_RSSI
+
   PT_WAIT_THREAD(&s->generate_pt,
                  enqueue_chunk(s, 0, "<h1>RSSI Probing</h1>"));
 
@@ -614,7 +597,6 @@ PT_THREAD(generate_config(struct httpd_state *s))
                                "<input type=\"submit\" value=\"Submit\">"));
   PT_WAIT_THREAD(&s->generate_pt,
                  enqueue_chunk(s, 0, "</form>"));
-#endif
 
   /* Actions */
   PT_WAIT_THREAD(&s->generate_pt, enqueue_chunk(s, 0, "<h1>Actions</h1>"));
@@ -641,7 +623,6 @@ PT_THREAD(generate_config(struct httpd_state *s))
   PT_END(&s->generate_pt);
 }
 /*---------------------------------------------------------------------------*/
-#if CC26XX_WEB_DEMO_MQTT_CLIENT
 static
 PT_THREAD(generate_mqtt_config(struct httpd_state *s))
 {
@@ -801,92 +782,6 @@ PT_THREAD(generate_mqtt_config(struct httpd_state *s))
 
   PT_END(&s->generate_pt);
 }
-#endif
-/*---------------------------------------------------------------------------*/
-#if CC26XX_WEB_DEMO_NET_UART
-static
-PT_THREAD(generate_net_uart_config(struct httpd_state *s))
-{
-
-  PT_BEGIN(&s->generate_pt);
-
-  /* Generate top matter (doctype, title, nav links etc) */
-  PT_WAIT_THREAD(&s->generate_pt,
-                 generate_top_matter(s, http_net_cfg_page.title,
-                                     http_config_css));
-
-  /* Net-UART settings */
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "<h1>%s</h1>", http_net_cfg_page.title));
-
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0,
-                               "<form name=\"input\" action=\"%s\" ",
-                               http_net_cfg_page.filename));
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "method=\"post\" enctype=\""));
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "application/x-www-form-urlencoded\" "));
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "accept-charset=\"UTF-8\">"));
-
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "%sRemote IPv6:%s", config_div_left,
-                               config_div_close));
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "%s<input type=\"text\" ",
-                               config_div_right));
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "value=\"%s\" ",
-                               cc26xx_web_demo_config.net_uart.remote_address));
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "name=\"net_uart_ip\">%s",
-                               config_div_close));
-
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "%sRemote Port:%s", config_div_left,
-                               config_div_close));
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "%s<input type=\"number\" ",
-                               config_div_right));
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "value=\"%u\" ",
-                               cc26xx_web_demo_config.net_uart.remote_port));
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "min=\"1\" max=\"65535\" "
-                                     "name=\"net_uart_port\">%s",
-                               config_div_close));
-
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "%s%s:%s%s", config_div_left,
-                               "Enable", config_div_close,
-                               config_div_right));
-
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "<input type=\"radio\" value=\"1\" "));
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "title=\"On\" name=\"net_uart_on\"%s>",
-                               cc26xx_web_demo_config.net_uart.enable ?
-                               " Checked" : ""));
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "<input type=\"radio\" value=\"0\" "));
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "title=\"Off\" name=\"net_uart_on\""
-                                     "%s>%s",
-                               cc26xx_web_demo_config.net_uart.enable ?
-                               "" : " Checked", config_div_close));
-
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0,
-                               "<input type=\"submit\" value=\"Submit\">"));
-  PT_WAIT_THREAD(&s->generate_pt,
-                 enqueue_chunk(s, 0, "</form>"));
-
-  PT_WAIT_THREAD(&s->generate_pt, enqueue_chunk(s, 1, http_bottom));
-
-  PT_END(&s->generate_pt);
-}
-#endif
 /*---------------------------------------------------------------------------*/
 static void
 lock_obtain(struct httpd_state *s)
@@ -1312,13 +1207,9 @@ init(void)
   list_add(pages_list, &http_index_page);
   list_add(pages_list, &http_dev_cfg_page);
 
-#if CC26XX_WEB_DEMO_NET_UART
-  list_add(pages_list, &http_net_cfg_page);
-#endif
 
-#if CC26XX_WEB_DEMO_MQTT_CLIENT
   list_add(pages_list, &http_mqtt_cfg_page);
-#endif
+
 }
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(httpd_simple_process, ev, data)

@@ -39,7 +39,6 @@
 /*---------------------------------------------------------------------------*/
 #include "contiki.h"
 #include "contiki-net.h"
-#include "rest-engine.h"
 #include "board-peripherals.h"
 #include "lib/sensors.h"
 #include "lib/list.h"
@@ -50,7 +49,6 @@
 #include "httpd-simple.h"
 #include "cc26xx-web-demo.h"
 #include "mqtt-client.h"
-#include "coap-server.h"
 
 #include <stdio.h>
 #include <stdlib.h>
