@@ -154,27 +154,6 @@ publish_led_off(void *d)                                                        
 }
 /*---------------------------------------------------------------------------*/
 static void
-new_net_config(void)                                                                      //DESCONECTA LA CONEXION CON EL BROKER
-{
-  /*
-   * We got a new configuration over the net.
-   *
-   * Disconnect from the current broker and stop the periodic timer.
-   *
-   * When the source of the new configuration is done, we will get notified
-   * via an event.
-   */
-  if(state == MQTT_CLIENT_STATE_NEWCONFIG) {
-    return;
-  }
-
-  state = MQTT_CLIENT_STATE_NEWCONFIG;
-
-  etimer_stop(&publish_periodic_timer);
-  mqtt_disconnect(&conn);
-}
-/*---------------------------------------------------------------------------*/
-static void
 pub_handler(const char *topic, uint16_t topic_len, const uint8_t *chunk,
             uint16_t chunk_len)
 {
@@ -496,8 +475,8 @@ state_machine(void)
         state = MQTT_CLIENT_STATE_ERROR;
         break;
       } else {                                                                            //SI AUTH_TOKEN != 0 
-        mqtt_set_username_password(&conn, "use-token-auth",                               //FIJA LA CONTRASEÑA DE LA CONEXIÓN
-                                   conf->auth_token);
+        mqtt_set_username_password(&conn, USERNAME,                                       //FIJA EL USUARIO DE LA CONEXIÓN
+                                   conf->auth_token);                                     //FIJA LA CONTRASEÑA DE LA CONEXIÓN
       }
     }
 

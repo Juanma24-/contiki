@@ -41,6 +41,7 @@
 /*---------------------------------------------------------------------------*/
 /* Enable the ROM bootloader */
 #define ROM_BOOTLOADER_ENABLE                 1
+#define BUTTON_SENSOR_CONF_ENABLE_SHUTDOWN    1
 /*---------------------------------------------------------------------------*/
 /*
  * Shrink the size of the uIP buffer, routing table and ND cache.

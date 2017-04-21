@@ -85,9 +85,10 @@
 #define CC26XX_WEB_DEMO_NET_CONNECT_PERIODIC        (CLOCK_SECOND >> 3)
 /*---------------------------------------------------------------------------*/
 /* Default configuration values */
-#define CC26XX_WEB_DEMO_DEFAULT_ORG_ID              "Mosquitto"
-#define CC26XX_WEB_DEMO_DEFAULT_TYPE_ID             "Sensortag_MQTT"
-#define AUTH_TOKEN			            			          "Password"
+#define CC26XX_WEB_DEMO_DEFAULT_ORG_ID              "Actuador"
+#define CC26XX_WEB_DEMO_DEFAULT_TYPE_ID             "Sensortag"
+#define USERNAME                                    "User"
+#define AUTH_TOKEN			            			          "Pass"
 #define CC26XX_WEB_DEMO_DEFAULT_EVENT_TYPE_ID       "status"
 #define CC26XX_WEB_DEMO_DEFAULT_SUBSCRIBE_CMD_TYPE  "+"
 #define CC26XX_WEB_DEMO_DEFAULT_BROKER_PORT         1883
