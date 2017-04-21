@@ -68,9 +68,7 @@ PROCESS(cc26xx_web_demo_process, "CC26XX Web Demo");
 
 struct ctimer batmon_timer;
 
-#if BOARD_SENSORTAG
 struct ctimer bmp_timer, hdc_timer, tmp_timer, opt_timer, mpu_timer;
-#endif
 /*---------------------------------------------------------------------------*/
 /* Provide visible feedback via LEDS while searching for a network */
 #define NO_NET_LED_DURATION        (CC26XX_WEB_DEMO_NET_CONNECT_PERIODIC >> 1)
@@ -112,7 +110,6 @@ DEMO_SENSOR(batmon_volt, CC26XX_WEB_DEMO_SENSOR_BATMON_VOLT,
             CC26XX_WEB_DEMO_UNIT_VOLT);
 
 /* Sensortag sensors */
-#if BOARD_SENSORTAG
 DEMO_SENSOR(bmp_pres, CC26XX_WEB_DEMO_SENSOR_BMP_PRES,
             "Air Pressure", "air-pressure", "bmp_pres",
             CC26XX_WEB_DEMO_UNIT_PRES);
@@ -155,15 +152,12 @@ DEMO_SENSOR(mpu_gyro_y, CC26XX_WEB_DEMO_SENSOR_MPU_GYRO_Y,
 DEMO_SENSOR(mpu_gyro_z, CC26XX_WEB_DEMO_SENSOR_MPU_GYRO_Z,
             "Gyro Z", "gyro-z", "gyro_Z",
             CC26XX_WEB_DEMO_UNIT_GYRO);
-#endif
 /*---------------------------------------------------------------------------*/
-#if BOARD_SENSORTAG
 static void init_bmp_reading(void *data);
 static void init_light_reading(void *data);
 static void init_hdc_reading(void *data);
 static void init_tmp_reading(void *data);
 static void init_mpu_reading(void *data);
-#endif
 /*---------------------------------------------------------------------------*/
 static void
 publish_led_off(void *d)
@@ -318,15 +312,9 @@ cc26xx_web_demo_restore_defaults(void)
     reading->publish = 1;
   }
 
-#if CC26XX_WEB_DEMO_MQTT_CLIENT
+
   process_post_synch(&mqtt_client_process,
                      cc26xx_web_demo_load_config_defaults, NULL);
-#endif
-
-#if CC26XX_WEB_DEMO_NET_UART
-  process_post_synch(&net_uart_process, cc26xx_web_demo_load_config_defaults,
-                     NULL);
-#endif
 
   save_config();
 
@@ -853,21 +841,8 @@ PROCESS_THREAD(cc26xx_web_demo_process, ev, data)
 
   /* Start all other (enabled) processes first */
   process_start(&httpd_simple_process, NULL);                                                                                       //Comienza Proceso HTTP (página Web)
-#if CC26XX_WEB_DEMO_COAP_SERVER
-  process_start(&coap_server_process, NULL);
-#endif
 
-#if CC26XX_WEB_DEMO_6LBR_CLIENT
-  process_start(&cetic_6lbr_client_process, NULL);
-#endif
-
-#if CC26XX_WEB_DEMO_MQTT_CLIENT
   process_start(&mqtt_client_process, NULL);                                                                                        //Inicia el cliene MQTT
-#endif
-
-#if CC26XX_WEB_DEMO_NET_UART
-  process_start(&net_uart_process, NULL);
-#endif
 
   /*
    * Now that processes have set their own config default values, set our
