@@ -167,7 +167,7 @@ pub_handler(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   }
 
   /* If the format != json, ignore */
-  if(strncmp(&topic[topic_len - 4], "json", 4) != 0) {
+  if(strncmp(&topic[topic_len - 4], "json", 4) != 0) {				//Si las cadenas no son iguales
     printf("Incorrect format\n");
   }
 
@@ -345,6 +345,7 @@ init_config()
   memcpy(conf->event_type_id, CC26XX_WEB_DEMO_DEFAULT_EVENT_TYPE_ID, 7);
   memcpy(conf->broker_ip, broker_ip, strlen(broker_ip));
   memcpy(conf->cmd_type, CC26XX_WEB_DEMO_DEFAULT_SUBSCRIBE_CMD_TYPE, 1);
+  memcpy(conf->user_id,CC26XX_WEB_DEMO_DEFAULT_USERNAME_ID,24)
   memcpy(conf->auth_token, AUTH_TOKEN, 20);
 
   conf->broker_port = CC26XX_WEB_DEMO_DEFAULT_BROKER_PORT;
@@ -475,7 +476,7 @@ state_machine(void)
         state = MQTT_CLIENT_STATE_ERROR;
         break;
       } else {                                                                            //SI AUTH_TOKEN != 0 
-        mqtt_set_username_password(&conn, USERNAME,                                       //FIJA EL USUARIO DE LA CONEXIÓN
+        mqtt_set_username_password(&conn, conf->user_id,                                  //FIJA EL USUARIO DE LA CONEXIÓN
                                    conf->auth_token);                                     //FIJA LA CONTRASEÑA DE LA CONEXIÓN
       }
     }

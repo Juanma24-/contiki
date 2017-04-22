@@ -40,6 +40,7 @@
 /*---------------------------------------------------------------------------*/
 #define MQTT_CLIENT_CONFIG_ORG_ID_LEN        32
 #define MQTT_CLIENT_CONFIG_TYPE_ID_LEN       32
+#define MQTT_CLIENT_CONFIG_USER_ID_LEN 		 32
 #define MQTT_CLIENT_CONFIG_AUTH_TOKEN_LEN    32
 #define MQTT_CLIENT_CONFIG_EVENT_TYPE_ID_LEN 32
 #define MQTT_CLIENT_CONFIG_CMD_TYPE_LEN       8
@@ -56,6 +57,7 @@ PROCESS_NAME(mqtt_client_process);
 typedef struct mqtt_client_config {
   char org_id[MQTT_CLIENT_CONFIG_ORG_ID_LEN];
   char type_id[MQTT_CLIENT_CONFIG_TYPE_ID_LEN];
+  char user_id[MQTT_CLIENT_CONFIG_USER_ID_LEN];
   char auth_token[MQTT_CLIENT_CONFIG_AUTH_TOKEN_LEN];
   char event_type_id[MQTT_CLIENT_CONFIG_EVENT_TYPE_ID_LEN];
   char broker_ip[MQTT_CLIENT_CONFIG_IP_ADDR_STR_LEN];

@@ -87,7 +87,7 @@
 /* Default configuration values */
 #define CC26XX_WEB_DEMO_DEFAULT_ORG_ID              "Actuador"
 #define CC26XX_WEB_DEMO_DEFAULT_TYPE_ID             "Sensortag"
-#define USERNAME                                    "User"
+#define CC26XX_WEB_DEMO_DEFAULT_USERNAME_ID         "User"
 #define AUTH_TOKEN			            			          "Pass"
 #define CC26XX_WEB_DEMO_DEFAULT_EVENT_TYPE_ID       "status"
 #define CC26XX_WEB_DEMO_DEFAULT_SUBSCRIBE_CMD_TYPE  "+"
