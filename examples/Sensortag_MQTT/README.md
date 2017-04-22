@@ -1,9 +1,10 @@
 CC26xx Web Demo Readme
 ======================
-
+OBJETIVOS
+----------
 El objetivo es obtener conectividad con el MQTT Broker de ALSTOM, eliminando  
 toda funcionalidad de HTTP Server. Además se persigue añadir un modo de bajo  
-consumo. 
+consumo, gracias al uso de QoS en nivel 1 o 2. 
 
 This demo project combines a number of web-based applications aiming to
 demonstrate the CC26xx capability. The applications are:
@@ -67,7 +68,8 @@ The buzzer is only available on the SensorTag. To do this, you can for example
 use mosquitto client to publish to `iot-2/cmd/leds/fmt/json`. So, to turn
 the buzzer on, you would do this:
 
-`mosquitto_pub -h <broker IP> -m "1" -t iot-2/cmd/buzz/fmt/json`
+`mosquitto_pub -h <broker IP> -m "1" -t sala/tipo_op/leds`
+`mosquitto_pub -h <broker IP> -m "1" -t sala/client_ID/Op_Mask`
 
 Where `broker IP` should be replaced with the IP address of your mosquitto
 broker (the one where you device has subscribed). Replace `-m "1'` with `-m "0"`
