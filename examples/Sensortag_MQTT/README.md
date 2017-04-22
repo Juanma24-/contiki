@@ -68,7 +68,7 @@ The buzzer is only available on the SensorTag. To do this, you can for example
 use mosquitto client to publish to `iot-2/cmd/leds/fmt/json`. So, to turn
 the buzzer on, you would do this:
 
-`mosquitto_pub -h <broker IP> -m "1" -t sala/tipo_op/leds`
+`mosquitto_pub -h <broker IP> -m "1" -t sala/tipo_op/leds`  
 `mosquitto_pub -h <broker IP> -m "1" -t sala/client_ID/Op_Mask`
 
 Where `broker IP` should be replaced with the IP address of your mosquitto
