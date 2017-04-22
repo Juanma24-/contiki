@@ -118,7 +118,9 @@ static uint8_t state;
 #define BUFFER_SIZE 64
 static char client_id[BUFFER_SIZE];
 static char pub_topic[BUFFER_SIZE];
-static char sub_topic[BUFFER_SIZE];
+static char sub_topic_Act[BUFFER_SIZE];
+static char sub_topic_OpMask[BUFFER_SIZE];
+static char tipo_op[5]="PIN01";
 /*---------------------------------------------------------------------------*/
 /*
  * The main MQTT buffers.
@@ -153,22 +155,26 @@ publish_led_off(void *d)                                                        
   leds_off(CC26XX_WEB_DEMO_STATUS_LED);
 }
 /*---------------------------------------------------------------------------*/
+//Revisar Numeros
 static void
-pub_handler(const char *topic, uint16_t topic_len, const uint8_t *chunk,
+pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
             uint16_t chunk_len)
 {
   DBG("Pub Handler: topic='%s' (len=%u), chunk_len=%u\n", topic, topic_len,
       chunk_len);
 
+  /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
+  con los esperados*/
   /* If we don't like the length, ignore */
-  if(topic_len != 23 || chunk_len != 1) {
-    printf("Incorrect topic or chunk len. Ignored\n");
-    return;
+  if((chunk_len != 1)||(topic_len!=14)) {
+    	printf("Incorrect topic or chunk len. Ignored\n");
+    	return;
   }
 
-  /* If the format != json, ignore */
-  if(strncmp(&topic[topic_len - 4], "json", 4) != 0) {				//Si las cadenas no son iguales
+  /* If the format != json, ignore*/ 
+  if(strncmp(&topic[4], tipo_op, 5) != 0) {				//Si las cadenas no son iguales
     printf("Incorrect format\n");
+    return;
   }
 
   if(strncmp(&topic[10], "leds", 4) == 0) {
@@ -179,16 +185,37 @@ pub_handler(const char *topic, uint16_t topic_len, const uint8_t *chunk,
     }
     return;
   }
+}
+/*---------------------------------------------------------------------------*/
+static void
+pub_handler_OpMask(const char *topic, uint16_t topic_len, const uint8_t *chunk,
+            uint16_t chunk_len)
+{
+  DBG("Pub Handler: topic='%s' (len=%u), chunk_len=%u\n", topic, topic_len,
+      chunk_len);
+  int i;
 
-  if(strncmp(&topic[10], "buzz", 4) == 0) {
-    if(chunk[0] == '1') {
-      buzzer_start(1000);
-    } else if(chunk[0] == '0') {
-      buzzer_stop();
-    }
+  /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
+  con los esperados*/
+  /* If we don't like the length, ignore */
+  if((chunk_len != 5)||(topic_len!=37)) {
+    	printf("Incorrect topic or chunk len. Ignored\n");
+    	return;
+  }
+
+  /* If the format != json, ignore*/ 
+  if(strncmp(&topic[4], tipo_op, 5) != 0) {				//Si las cadenas no son iguales
+    printf("Incorrect format\n");
     return;
   }
 
+  if(strncmp(&topic[topic_len - 7],"Op_Mask",7) == 0){
+  	for(i=0;i<chunk_len;i++){
+  		tipo_op[i] = chunk[i];
+  	}
+  	state = MQTT_CLIENT_STATE_NEWCONFIG;
+  	return;
+  }
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -221,9 +248,14 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
           "size is %i bytes. Content:\n\n",
           msg_ptr->topic, msg_ptr->payload_length);
     }
-
-    pub_handler(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
+    if(strlen(msg_ptr->topic) == 14){
+    	pub_handler_Act(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
                 msg_ptr->payload_length);
+    }
+    if(strlen(msg_ptr->topic) == 37){
+    	pub_handler_OpMask(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
+                msg_ptr->payload_length);
+    }
     break;
   }
   case MQTT_EVENT_SUBACK: {
@@ -262,15 +294,20 @@ construct_pub_topic(void)
 static int
 construct_sub_topic(void)
 {
-  int len = snprintf(sub_topic, BUFFER_SIZE, "iot-2/cmd/%s/fmt/json",
-                     conf->cmd_type);
+  int len1 = snprintf(sub_topic_Act, BUFFER_SIZE, "%s/%s/leds",
+                     conf->sala,tipo_op);
+  int len2 = snprintf(sub_topic_OpMask,BUFFER_SIZE,"%s/%s/Op_Mask",
+  						conf->sala,client_id);
 
   /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
-  if(len < 0 || len >= BUFFER_SIZE) {
-    printf("Sub Topic: %d, Buffer %d\n", len, BUFFER_SIZE);
+  if(len1 < 0 || len1 >= BUFFER_SIZE) {
+    printf("Sub Topic: %d, Buffer %d\n", len1, BUFFER_SIZE);
     return 0;
   }
-
+  if(len2 < 0 || len2 >= BUFFER_SIZE) {
+    printf("Sub Topic: %d, Buffer %d\n", len2, BUFFER_SIZE);
+    return 0;
+  }
   return 1;
 }
 /*---------------------------------------------------------------------------*/
@@ -345,8 +382,9 @@ init_config()
   memcpy(conf->event_type_id, CC26XX_WEB_DEMO_DEFAULT_EVENT_TYPE_ID, 7);
   memcpy(conf->broker_ip, broker_ip, strlen(broker_ip));
   memcpy(conf->cmd_type, CC26XX_WEB_DEMO_DEFAULT_SUBSCRIBE_CMD_TYPE, 1);
-  memcpy(conf->user_id,CC26XX_WEB_DEMO_DEFAULT_USERNAME_ID,24)
+  memcpy(conf->user_id,CC26XX_WEB_DEMO_DEFAULT_USERNAME_ID,24);
   memcpy(conf->auth_token, AUTH_TOKEN, 20);
+  memcpy(conf->sala,CC26XX_WEB_DEMO_DEFAULT_SALA,5);
 
   conf->broker_port = CC26XX_WEB_DEMO_DEFAULT_BROKER_PORT;
   conf->pub_interval = CC26XX_WEB_DEMO_DEFAULT_PUBLISH_INTERVAL;
@@ -359,17 +397,16 @@ init_config()
                                                                                     //CONSTRUCT_SUB_TOPIC.
                                                                                     //IMPORTANTE: NIVEL DE QoS == 0 (SOLO SE ENVIA UNA VEZ)
 static void
-subscribe(void)
+subscribe()
 {
   /* Publish MQTT topic in IBM quickstart format */
   mqtt_status_t status;
 
-  status = mqtt_subscribe(&conn, NULL, sub_topic, MQTT_QOS_LEVEL_0);
-
   DBG("APP - Subscribing!\n");
-  if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
-    DBG("APP - Tried to subscribe but command queue was full!\n");
-  }
+  status = mqtt_subscribe(&conn, NULL, sub_topic_Act, MQTT_QOS_LEVEL_0);
+  do{
+  		status = mqtt_subscribe(&conn, NULL, sub_topic_OpMask, MQTT_QOS_LEVEL_0);
+  }while(status == MQTT_STATUS_OUT_QUEUE_FULL);
 }
 /*---------------------------------------------------------------------------*/
                                                                                       //PUBLICA AL BROKER
