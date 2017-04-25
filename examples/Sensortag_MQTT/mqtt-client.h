@@ -38,12 +38,11 @@
 #ifndef MQTT_CLIENT_H_
 #define MQTT_CLIENT_H_
 /*---------------------------------------------------------------------------*/
-#define MQTT_CLIENT_CONFIG_ORG_ID_LEN        32
-#define MQTT_CLIENT_CONFIG_TYPE_ID_LEN       32
-#define MQTT_CLIENT_CONFIG_USER_ID_LEN 		 32
+#define MQTT_CLIENT_CONFIG_USER_ID_LEN 		   32
 #define MQTT_CLIENT_CONFIG_AUTH_TOKEN_LEN    32
 #define MQTT_CLIENT_CONFIG_EVENT_TYPE_ID_LEN 32
-#define MQTT_CLIENT_CONFIG_SALA			     3
+#define MQTT_CLIENT_CONFIG_SALA			          3
+#define MQTT_CLIENT_CONFIG_TIPO_OP            5
 #define MQTT_CLIENT_CONFIG_CMD_TYPE_LEN       8
 #define MQTT_CLIENT_CONFIG_IP_ADDR_STR_LEN   64
 /*---------------------------------------------------------------------------*/
@@ -56,14 +55,13 @@ PROCESS_NAME(mqtt_client_process);
  * \brief Data structure declaration for the MQTT client configuration
  */
 typedef struct mqtt_client_config {
-  char org_id[MQTT_CLIENT_CONFIG_ORG_ID_LEN];
-  char type_id[MQTT_CLIENT_CONFIG_TYPE_ID_LEN];
   char user_id[MQTT_CLIENT_CONFIG_USER_ID_LEN];
   char auth_token[MQTT_CLIENT_CONFIG_AUTH_TOKEN_LEN];
   char event_type_id[MQTT_CLIENT_CONFIG_EVENT_TYPE_ID_LEN];
   char broker_ip[MQTT_CLIENT_CONFIG_IP_ADDR_STR_LEN];
   char cmd_type[MQTT_CLIENT_CONFIG_CMD_TYPE_LEN];
   char sala[MQTT_CLIENT_CONFIG_SALA];
+  char tipo_op[MQTT_CLIENT_CONFIG_TIPO_OP];
   clock_time_t pub_interval;
   uint16_t broker_port;
 } mqtt_client_config_t;

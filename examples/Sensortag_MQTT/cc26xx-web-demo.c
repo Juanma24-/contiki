@@ -186,16 +186,13 @@ save_config()
     cc26xx_web_demo_config.len = sizeof(cc26xx_web_demo_config_t);
     cc26xx_web_demo_config.sensors_bitmap = 0;
 
-    for(reading = list_head(sensor_list);
-        reading != NULL;
-        reading = list_item_next(reading)) {
+    for(reading = list_head(sensor_list);reading != NULL;reading = list_item_next(reading)) {
       if(reading->publish) {
         cc26xx_web_demo_config.sensors_bitmap |= (1 << reading->type);
       }
     }
 
-    rv = ext_flash_write(CONFIG_FLASH_OFFSET, sizeof(cc26xx_web_demo_config_t),
-                         (uint8_t *)&cc26xx_web_demo_config);
+    rv = ext_flash_write(CONFIG_FLASH_OFFSET, sizeof(cc26xx_web_demo_config_t),(uint8_t *)&cc26xx_web_demo_config);
     if(!rv) {
       printf("Error saving config\n");
     }
@@ -303,15 +300,12 @@ cc26xx_web_demo_restore_defaults(void)
 
   leds_on(LEDS_ALL);
 
-  for(reading = list_head(sensor_list);
-      reading != NULL;
-      reading = list_item_next(reading)) {
+  for(reading = list_head(sensor_list);reading != NULL;reading = list_item_next(reading)) {
     reading->publish = 1;
   }
 
 
-  process_post_synch(&mqtt_client_process,
-                     cc26xx_web_demo_load_config_defaults, NULL);
+  process_post_synch(&mqtt_client_process,cc26xx_web_demo_load_config_defaults, NULL);
 
   save_config();
 
@@ -319,7 +313,6 @@ cc26xx_web_demo_restore_defaults(void)
 }
 /*---------------------------------------------------------------------------*/
 
-/*---------------------------------------------------------------------------*/
 static void
 echo_reply_handler(uip_ipaddr_t *source, uint8_t ttl, uint8_t *data,
                    uint16_t datalen)
@@ -770,7 +763,7 @@ PROCESS_THREAD(cc26xx_web_demo_process, ev, data)
   cc26xx_web_demo_config.sensors_bitmap = 0xFFFFFFFF; /* all on by default */
   cc26xx_web_demo_config.def_rt_ping_interval =
       CC26XX_WEB_DEMO_DEFAULT_RSSI_MEAS_INTERVAL;
-  load_config();                                                                                                //Carga la configuración
+  load_config();                                                                  //Carga la configuración
 
   /*
    * Notify all other processes (basically the ones in this demo) that the
@@ -810,13 +803,11 @@ PROCESS_THREAD(cc26xx_web_demo_process, ev, data)
     }
 
     if(ev == sensors_event && data == CC26XX_WEB_DEMO_SENSOR_READING_TRIGGER) {
-      if((CC26XX_WEB_DEMO_SENSOR_READING_TRIGGER)->value(
-           BUTTON_SENSOR_VALUE_DURATION) > CLOCK_SECOND * 5) {
+      if((CC26XX_WEB_DEMO_SENSOR_READING_TRIGGER)->value(BUTTON_SENSOR_VALUE_DURATION) > CLOCK_SECOND * 5) {
         printf("Restoring defaults!\n");
         cc26xx_web_demo_restore_defaults();
       } else {
         init_sensor_readings();
-
         process_post(PROCESS_BROADCAST, cc26xx_web_demo_publish_event, NULL);
       }
     } else if(ev == sensors_event && data == &bmp_280_sensor) {
