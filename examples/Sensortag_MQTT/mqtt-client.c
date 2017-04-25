@@ -180,7 +180,7 @@ pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   }
   /*Comprueba que el topic termina en leds, es una medida evitable, pero importante si 
   se introducen más topics por operación */
-  if(strncmp(&topic[10], "leds", 4) == 0) {
+  if(strncmp(&topic[topic_len - 4], "leds", 4) == 0) {
     if(chunk[0] == '1') {
       leds_on(LEDS_RED);
     } else if(chunk[0] == '0') {
@@ -200,13 +200,13 @@ pub_handler_OpMask(const char *topic, uint16_t topic_len, const uint8_t *chunk,
     /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
     con los esperados
     If we don't like the length, ignore*/ 
-  if((chunk_len != 5)||(topic_len!=37)) {
+  if((chunk_len != 5)||(topic_len!=20)) {
     	printf("Incorrect topic or chunk len. Ignored\n");
     	return;
   }
 
   /* Se comprueba si el mensaje iba para este Sensortag comprobando que coinciden los client_ID*/ 
-  if(strncmp(&topic[4], client_id, 5) != 0) {				//Si las cadenas no son iguales
+  if(strncmp(&topic[4], client_id, 8) != 0) {				//Si las cadenas no son iguales
     printf("Incorrect format\n");
     return;
   }
@@ -216,6 +216,7 @@ pub_handler_OpMask(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   		tipo_op[i] = chunk[i];
   	}
   	state = MQTT_CLIENT_STATE_NEWCONFIG;
+    mqtt_disconnect(&conn);
   	return;
   }
 }
