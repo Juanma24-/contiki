@@ -46,7 +46,7 @@
 #include "net/ipv6/sicslowpan.h"
 #include "button-sensor.h"
 #include "batmon-sensor.h"
-#include "cc26xx-web-demo.h"
+#include "alstom-mqtt-iot.h"
 #include "mqtt-client.h"
 
 #include <stdio.h>
@@ -54,7 +54,7 @@
 #include <string.h>
 /*---------------------------------------------------------------------------*/
 PROCESS_NAME(cetic_6lbr_client_process);
-PROCESS(cc26xx_web_demo_process, "CC26XX Web Demo");
+PROCESS(alstom_mqtt_iot_process, "CC26XX Web Demo");
 /*---------------------------------------------------------------------------*/
 /*
  * Update sensor readings in a staggered fashion every SENSOR_READING_PERIOD
@@ -68,7 +68,7 @@ struct ctimer batmon_timer;
 struct ctimer bmp_timer, hdc_timer, tmp_timer, opt_timer, mpu_timer;
 /*---------------------------------------------------------------------------*/
 /* Provide visible feedback via LEDS while searching for a network */
-#define NO_NET_LED_DURATION        (CC26XX_WEB_DEMO_NET_CONNECT_PERIODIC >> 1)
+#define NO_NET_LED_DURATION        (ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC >> 1)
 
 static struct etimer et;
 static struct ctimer ct;
@@ -80,75 +80,75 @@ static struct etimer echo_request_timer;
 int def_rt_rssi = 0;
 
 /*---------------------------------------------------------------------------*/
-process_event_t cc26xx_web_demo_publish_event;
-process_event_t cc26xx_web_demo_config_loaded_event;
-process_event_t cc26xx_web_demo_load_config_defaults;
+process_event_t alstom_mqtt_iot_publish_event;
+process_event_t alstom_mqtt_iot_config_loaded_event;
+process_event_t alstom_mqtt_iot_load_config_defaults;
 /*---------------------------------------------------------------------------*/
 /* Saved settings on flash: store, offset, magic */
 #define CONFIG_FLASH_OFFSET        0
 #define CONFIG_MAGIC      0xCC265002
 
-cc26xx_web_demo_config_t cc26xx_web_demo_config;
+alstom_mqtt_iot_config_t alstom_mqtt_iot_config;
 /*---------------------------------------------------------------------------*/
 /* A cache of sensor values. Updated periodically or upon key press */
 LIST(sensor_list);
 /*---------------------------------------------------------------------------*/
 /* The objects representing sensors used in this demo */
 #define DEMO_SENSOR(name, type, descr, xml_element, form_field, units) \
-  cc26xx_web_demo_sensor_reading_t name##_reading = \
+  alstom_mqtt_iot_sensor_reading_t name##_reading = \
   { NULL, 0, 0, descr, xml_element, form_field, units, type, 1, 1 }
 
 /* CC26xx sensors */
-DEMO_SENSOR(batmon_temp, CC26XX_WEB_DEMO_SENSOR_BATMON_TEMP,
+DEMO_SENSOR(batmon_temp, ALSTOM_MQTT_IOT_SENSOR_BATMON_TEMP,
             "Battery Temp", "battery-temp", "batmon_temp",
-            CC26XX_WEB_DEMO_UNIT_TEMP);
-DEMO_SENSOR(batmon_volt, CC26XX_WEB_DEMO_SENSOR_BATMON_VOLT,
+            ALSTOM_MQTT_IOT_UNIT_TEMP);
+DEMO_SENSOR(batmon_volt, ALSTOM_MQTT_IOT_SENSOR_BATMON_VOLT,
             "Battery Volt", "battery-volt", "batmon_volt",
-            CC26XX_WEB_DEMO_UNIT_VOLT);
+            ALSTOM_MQTT_IOT_UNIT_VOLT);
 
 /* Sensortag sensors */
-DEMO_SENSOR(bmp_pres, CC26XX_WEB_DEMO_SENSOR_BMP_PRES,
+DEMO_SENSOR(bmp_pres, ALSTOM_MQTT_IOT_SENSOR_BMP_PRES,
             "Air Pressure", "air-pressure", "bmp_pres",
-            CC26XX_WEB_DEMO_UNIT_PRES);
-DEMO_SENSOR(bmp_temp, CC26XX_WEB_DEMO_SENSOR_BMP_TEMP,
+            ALSTOM_MQTT_IOT_UNIT_PRES);
+DEMO_SENSOR(bmp_temp, ALSTOM_MQTT_IOT_SENSOR_BMP_TEMP,
             "Air Temp", "air-temp", "bmp_temp",
-            CC26XX_WEB_DEMO_UNIT_TEMP);
-DEMO_SENSOR(hdc_temp, CC26XX_WEB_DEMO_SENSOR_HDC_TEMP,
+            ALSTOM_MQTT_IOT_UNIT_TEMP);
+DEMO_SENSOR(hdc_temp, ALSTOM_MQTT_IOT_SENSOR_HDC_TEMP,
             "HDC Temp", "hdc-temp", "hdc_temp",
-            CC26XX_WEB_DEMO_UNIT_TEMP);
-DEMO_SENSOR(hdc_hum, CC26XX_WEB_DEMO_SENSOR_HDC_HUMIDITY,
+            ALSTOM_MQTT_IOT_UNIT_TEMP);
+DEMO_SENSOR(hdc_hum, ALSTOM_MQTT_IOT_SENSOR_HDC_HUMIDITY,
             "HDC Humidity", "hdc-humidity", "hdc_hum",
-            CC26XX_WEB_DEMO_UNIT_HUMIDITY);
-DEMO_SENSOR(tmp_amb, CC26XX_WEB_DEMO_SENSOR_TMP_AMBIENT,
+            ALSTOM_MQTT_IOT_UNIT_HUMIDITY);
+DEMO_SENSOR(tmp_amb, ALSTOM_MQTT_IOT_SENSOR_TMP_AMBIENT,
             "Ambient Temp", "ambient-temp", "tmp_amb",
-            CC26XX_WEB_DEMO_UNIT_TEMP);
-DEMO_SENSOR(tmp_obj, CC26XX_WEB_DEMO_SENSOR_TMP_OBJECT,
+            ALSTOM_MQTT_IOT_UNIT_TEMP);
+DEMO_SENSOR(tmp_obj, ALSTOM_MQTT_IOT_SENSOR_TMP_OBJECT,
             "Object Temp", "object-temp", "tmp_obj",
-            CC26XX_WEB_DEMO_UNIT_TEMP);
-DEMO_SENSOR(opt, CC26XX_WEB_DEMO_SENSOR_OPT_LIGHT,
+            ALSTOM_MQTT_IOT_UNIT_TEMP);
+DEMO_SENSOR(opt, ALSTOM_MQTT_IOT_SENSOR_OPT_LIGHT,
             "Light", "light", "light",
-            CC26XX_WEB_DEMO_UNIT_LIGHT);
+            ALSTOM_MQTT_IOT_UNIT_LIGHT);
 
 /* MPU Readings */
-DEMO_SENSOR(mpu_acc_x, CC26XX_WEB_DEMO_SENSOR_MPU_ACC_X,
+DEMO_SENSOR(mpu_acc_x, ALSTOM_MQTT_IOT_SENSOR_MPU_ACC_X,
             "Acc X", "acc-x", "acc_x",
-            CC26XX_WEB_DEMO_UNIT_ACC);
-DEMO_SENSOR(mpu_acc_y, CC26XX_WEB_DEMO_SENSOR_MPU_ACC_Y,
+            ALSTOM_MQTT_IOT_UNIT_ACC);
+DEMO_SENSOR(mpu_acc_y, ALSTOM_MQTT_IOT_SENSOR_MPU_ACC_Y,
             "Acc Y", "acc-y", "acc_y",
-            CC26XX_WEB_DEMO_UNIT_ACC);
-DEMO_SENSOR(mpu_acc_z, CC26XX_WEB_DEMO_SENSOR_MPU_ACC_Z,
+            ALSTOM_MQTT_IOT_UNIT_ACC);
+DEMO_SENSOR(mpu_acc_z, ALSTOM_MQTT_IOT_SENSOR_MPU_ACC_Z,
             "Acc Z", "acc-z", "acc_z",
-            CC26XX_WEB_DEMO_UNIT_ACC);
+            ALSTOM_MQTT_IOT_UNIT_ACC);
 
-DEMO_SENSOR(mpu_gyro_x, CC26XX_WEB_DEMO_SENSOR_MPU_GYRO_X,
+DEMO_SENSOR(mpu_gyro_x, ALSTOM_MQTT_IOT_SENSOR_MPU_GYRO_X,
             "Gyro X", "gyro-x", "gyro_x",
-            CC26XX_WEB_DEMO_UNIT_GYRO);
-DEMO_SENSOR(mpu_gyro_y, CC26XX_WEB_DEMO_SENSOR_MPU_GYRO_Y,
+            ALSTOM_MQTT_IOT_UNIT_GYRO);
+DEMO_SENSOR(mpu_gyro_y, ALSTOM_MQTT_IOT_SENSOR_MPU_GYRO_Y,
             "Gyro Y", "gyro-y", "gyro_y",
-            CC26XX_WEB_DEMO_UNIT_GYRO);
-DEMO_SENSOR(mpu_gyro_z, CC26XX_WEB_DEMO_SENSOR_MPU_GYRO_Z,
+            ALSTOM_MQTT_IOT_UNIT_GYRO);
+DEMO_SENSOR(mpu_gyro_z, ALSTOM_MQTT_IOT_SENSOR_MPU_GYRO_Z,
             "Gyro Z", "gyro-z", "gyro_Z",
-            CC26XX_WEB_DEMO_UNIT_GYRO);
+            ALSTOM_MQTT_IOT_UNIT_GYRO);
 /*---------------------------------------------------------------------------*/
 static void init_bmp_reading(void *data);
 static void init_light_reading(void *data);
@@ -159,7 +159,7 @@ static void init_mpu_reading(void *data);
 static void
 publish_led_off(void *d)
 {
-  leds_off(CC26XX_WEB_DEMO_STATUS_LED);
+  leds_off(ALSTOM_MQTT_IOT_STATUS_LED);
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -167,7 +167,7 @@ save_config()
 {
   /* Dump current running config to flash */
   int rv;
-  cc26xx_web_demo_sensor_reading_t *reading = NULL;
+  alstom_mqtt_iot_sensor_reading_t *reading = NULL;
 
   rv = ext_flash_open();
 
@@ -177,22 +177,22 @@ save_config()
     return;
   }
 
-  rv = ext_flash_erase(CONFIG_FLASH_OFFSET, sizeof(cc26xx_web_demo_config_t));
+  rv = ext_flash_erase(CONFIG_FLASH_OFFSET, sizeof(alstom_mqtt_iot_config_t));
 
   if(!rv) {
     printf("Error erasing flash\n");
   } else {
-    cc26xx_web_demo_config.magic = CONFIG_MAGIC;
-    cc26xx_web_demo_config.len = sizeof(cc26xx_web_demo_config_t);
-    cc26xx_web_demo_config.sensors_bitmap = 0;
+    alstom_mqtt_iot_config.magic = CONFIG_MAGIC;
+    alstom_mqtt_iot_config.len = sizeof(alstom_mqtt_iot_config_t);
+    alstom_mqtt_iot_config.sensors_bitmap = 0;
 
     for(reading = list_head(sensor_list);reading != NULL;reading = list_item_next(reading)) {
       if(reading->publish) {
-        cc26xx_web_demo_config.sensors_bitmap |= (1 << reading->type);
+        alstom_mqtt_iot_config.sensors_bitmap |= (1 << reading->type);
       }
     }
 
-    rv = ext_flash_write(CONFIG_FLASH_OFFSET, sizeof(cc26xx_web_demo_config_t),(uint8_t *)&cc26xx_web_demo_config);
+    rv = ext_flash_write(CONFIG_FLASH_OFFSET, sizeof(alstom_mqtt_iot_config_t),(uint8_t *)&alstom_mqtt_iot_config);
     if(!rv) {
       printf("Error saving config\n");
     }
@@ -205,8 +205,8 @@ static void
 load_config()
 {
   /* Read from flash into a temp buffer */
-  cc26xx_web_demo_config_t tmp_cfg;
-  cc26xx_web_demo_sensor_reading_t *reading = NULL;
+  alstom_mqtt_iot_config_t tmp_cfg;
+  alstom_mqtt_iot_sensor_reading_t *reading = NULL;
 
   int rv = ext_flash_open();
 
@@ -227,26 +227,26 @@ load_config()
   }
 
   if(tmp_cfg.magic == CONFIG_MAGIC && tmp_cfg.len == sizeof(tmp_cfg)) {
-    memcpy(&cc26xx_web_demo_config, &tmp_cfg, sizeof(cc26xx_web_demo_config));
+    memcpy(&alstom_mqtt_iot_config, &tmp_cfg, sizeof(alstom_mqtt_iot_config));
   }
 
   for(reading = list_head(sensor_list);
       reading != NULL;
       reading = list_item_next(reading)) {
-    if(cc26xx_web_demo_config.sensors_bitmap & (1 << reading->type)) {
+    if(alstom_mqtt_iot_config.sensors_bitmap & (1 << reading->type)) {
       reading->publish = 1;
     } else {
       reading->publish = 0;
-      snprintf(reading->converted, CC26XX_WEB_DEMO_CONVERTED_LEN, "\"N/A\"");
+      snprintf(reading->converted, ALSTOM_MQTT_IOT_CONVERTED_LEN, "\"N/A\"");
     }
   }
 }
 /*---------------------------------------------------------------------------*/
 /* Don't start everything here, we need to dictate order of initialisation */
-AUTOSTART_PROCESSES(&cc26xx_web_demo_process);
+AUTOSTART_PROCESSES(&alstom_mqtt_iot_process);
 /*---------------------------------------------------------------------------*/
 int
-cc26xx_web_demo_ipaddr_sprintf(char *buf, uint8_t buf_len,
+alstom_mqtt_iot_ipaddr_sprintf(char *buf, uint8_t buf_len,
                                const uip_ipaddr_t *addr)
 {
   uint16_t a;
@@ -271,10 +271,10 @@ cc26xx_web_demo_ipaddr_sprintf(char *buf, uint8_t buf_len,
   return len;
 }
 /*---------------------------------------------------------------------------*/
-const cc26xx_web_demo_sensor_reading_t *
-cc26xx_web_demo_sensor_lookup(int sens_type)
+const alstom_mqtt_iot_sensor_reading_t *
+alstom_mqtt_iot_sensor_lookup(int sens_type)
 {
-  cc26xx_web_demo_sensor_reading_t *reading = NULL;
+  alstom_mqtt_iot_sensor_reading_t *reading = NULL;
 
   for(reading = list_head(sensor_list);
       reading != NULL;
@@ -287,16 +287,16 @@ cc26xx_web_demo_sensor_lookup(int sens_type)
   return NULL;
 }
 /*---------------------------------------------------------------------------*/
-const cc26xx_web_demo_sensor_reading_t *
-cc26xx_web_demo_sensor_first()
+const alstom_mqtt_iot_sensor_reading_t *
+alstom_mqtt_iot_sensor_first()
 {
   return list_head(sensor_list);
 }
 /*---------------------------------------------------------------------------*/
 void
-cc26xx_web_demo_restore_defaults(void)
+alstom_mqtt_iot_restore_defaults(void)
 {
-  cc26xx_web_demo_sensor_reading_t *reading = NULL;
+  alstom_mqtt_iot_sensor_reading_t *reading = NULL;
 
   leds_on(LEDS_ALL);
 
@@ -305,7 +305,7 @@ cc26xx_web_demo_restore_defaults(void)
   }
 
 
-  process_post_synch(&mqtt_client_process,cc26xx_web_demo_load_config_defaults, NULL);
+  process_post_synch(&mqtt_client_process,alstom_mqtt_iot_load_config_defaults, NULL);
 
   save_config();
 
@@ -330,7 +330,7 @@ ping_parent(void)
   }
 
   uip_icmp6_send(uip_ds6_defrt_choose(), ICMP6_ECHO_REQUEST, 0,
-                 CC26XX_WEB_DEMO_ECHO_REQ_PAYLOAD_LEN);
+                 ALSTOM_MQTT_IOT_ECHO_REQ_PAYLOAD_LEN);
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -347,8 +347,8 @@ get_batmon_reading(void *data)
       batmon_temp_reading.raw = value;
 
       buf = batmon_temp_reading.converted;
-      memset(buf, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
-      snprintf(buf, CC26XX_WEB_DEMO_CONVERTED_LEN, "%d", value);
+      memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
+      snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d", value);
     }
   }
 
@@ -358,8 +358,8 @@ get_batmon_reading(void *data)
       batmon_volt_reading.raw = value;
 
       buf = batmon_volt_reading.converted;
-      memset(buf, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
-      snprintf(buf, CC26XX_WEB_DEMO_CONVERTED_LEN, "%d", (value * 125) >> 5);
+      memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
+      snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d", (value * 125) >> 5);
     }
   }
 
@@ -367,7 +367,7 @@ get_batmon_reading(void *data)
 }
 /*---------------------------------------------------------------------------*/
 static void
-compare_and_update(cc26xx_web_demo_sensor_reading_t *reading)
+compare_and_update(alstom_mqtt_iot_sensor_reading_t *reading)
 {
   if(reading->last == reading->raw) {
     reading->changed = 0;
@@ -407,8 +407,8 @@ get_bmp_reading()
       compare_and_update(&bmp_pres_reading);
 
       buf = bmp_pres_reading.converted;
-      memset(buf, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
-      snprintf(buf, CC26XX_WEB_DEMO_CONVERTED_LEN, "%d.%02d", value / 100,
+      memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
+      snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,
                value % 100);
     }
   }
@@ -421,8 +421,8 @@ get_bmp_reading()
       compare_and_update(&bmp_temp_reading);
 
       buf = bmp_temp_reading.converted;
-      memset(buf, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
-      snprintf(buf, CC26XX_WEB_DEMO_CONVERTED_LEN, "%d.%02d", value / 100,
+      memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
+      snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,
                value % 100);
     }
   }
@@ -456,8 +456,8 @@ get_tmp_reading()
     compare_and_update(&tmp_amb_reading);
 
     buf = tmp_amb_reading.converted;
-    memset(buf, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
-    snprintf(buf, CC26XX_WEB_DEMO_CONVERTED_LEN, "%d.%03d", value / 1000,
+    memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
+    snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%03d", value / 1000,
              value % 1000);
   }
 
@@ -468,8 +468,8 @@ get_tmp_reading()
     compare_and_update(&tmp_obj_reading);
 
     buf = tmp_obj_reading.converted;
-    memset(buf, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
-    snprintf(buf, CC26XX_WEB_DEMO_CONVERTED_LEN, "%d.%03d", value / 1000,
+    memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
+    snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%03d", value / 1000,
              value % 1000);
   }
 
@@ -494,8 +494,8 @@ get_hdc_reading()
       compare_and_update(&hdc_temp_reading);
 
       buf = hdc_temp_reading.converted;
-      memset(buf, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
-      snprintf(buf, CC26XX_WEB_DEMO_CONVERTED_LEN, "%d.%02d", value / 100,
+      memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
+      snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,
                value % 100);
     }
   }
@@ -508,8 +508,8 @@ get_hdc_reading()
       compare_and_update(&hdc_hum_reading);
 
       buf = hdc_hum_reading.converted;
-      memset(buf, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
-      snprintf(buf, CC26XX_WEB_DEMO_CONVERTED_LEN, "%d.%02d", value / 100,
+      memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
+      snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,
                value % 100);
     }
   }
@@ -533,8 +533,8 @@ get_light_reading()
     compare_and_update(&opt_reading);
 
     buf = opt_reading.converted;
-    memset(buf, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
-    snprintf(buf, CC26XX_WEB_DEMO_CONVERTED_LEN, "%d.%02d", value / 100,
+    memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
+    snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,
              value % 100);
   }
 
@@ -595,37 +595,37 @@ get_mpu_reading()
 
   if(mpu_gyro_x_reading.publish) {
     compare_and_update(&mpu_gyro_x_reading);
-    memset(mpu_gyro_x_reading.converted, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
+    memset(mpu_gyro_x_reading.converted, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
     print_mpu_reading(mpu_gyro_x_reading.raw, mpu_gyro_x_reading.converted);
   }
 
   if(mpu_gyro_y_reading.publish) {
     compare_and_update(&mpu_gyro_y_reading);
-    memset(mpu_gyro_y_reading.converted, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
+    memset(mpu_gyro_y_reading.converted, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
     print_mpu_reading(mpu_gyro_y_reading.raw, mpu_gyro_y_reading.converted);
   }
 
   if(mpu_gyro_z_reading.publish) {
     compare_and_update(&mpu_gyro_z_reading);
-    memset(mpu_gyro_z_reading.converted, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
+    memset(mpu_gyro_z_reading.converted, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
     print_mpu_reading(mpu_gyro_z_reading.raw, mpu_gyro_z_reading.converted);
   }
 
   if(mpu_acc_x_reading.publish) {
     compare_and_update(&mpu_acc_x_reading);
-    memset(mpu_acc_x_reading.converted, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
+    memset(mpu_acc_x_reading.converted, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
     print_mpu_reading(mpu_acc_x_reading.raw, mpu_acc_x_reading.converted);
   }
 
   if(mpu_acc_y_reading.publish) {
     compare_and_update(&mpu_acc_y_reading);
-    memset(mpu_acc_y_reading.converted, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
+    memset(mpu_acc_y_reading.converted, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
     print_mpu_reading(mpu_acc_y_reading.raw, mpu_acc_y_reading.converted);
   }
 
   if(mpu_acc_z_reading.publish) {
     compare_and_update(&mpu_acc_z_reading);
-    memset(mpu_acc_z_reading.converted, 0, CC26XX_WEB_DEMO_CONVERTED_LEN);
+    memset(mpu_acc_z_reading.converted, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
     print_mpu_reading(mpu_acc_z_reading.raw, mpu_acc_z_reading.converted);
   }
 
@@ -742,43 +742,42 @@ init_sensors(void)
   SENSORS_ACTIVATE(reed_relay_sensor);
 }
 /*---------------------------------------------------------------------------*/
-PROCESS_THREAD(cc26xx_web_demo_process, ev, data)
+PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
 {
   PROCESS_BEGIN();
 
-  printf("CC26XX Web Demo Process\n");
+  printf("ALSTOM MQTT IoT Process\n");
 
   init_sensors();                                                                                                                   //Inicia Sensores
                                                                                                                                     //Reservas de memoria para procesos
-  cc26xx_web_demo_publish_event = process_alloc_event();
-  cc26xx_web_demo_config_loaded_event = process_alloc_event();
-  cc26xx_web_demo_load_config_defaults = process_alloc_event();
+  alstom_mqtt_iot_publish_event = process_alloc_event();
+  alstom_mqtt_iot_config_loaded_event = process_alloc_event();
+  alstom_mqtt_iot_load_config_defaults = process_alloc_event();
 
-  process_start(&mqtt_client_process, NULL);                                                                                        //Inicia el cliene MQTT
+  process_start(&mqtt_client_process, NULL);                                                                                        //Inicia el cliente MQTT
 
   /*
    * Now that processes have set their own config default values, set our
    * own defaults and restore saved config from flash...
    */
-  cc26xx_web_demo_config.sensors_bitmap = 0xFFFFFFFF; /* all on by default */
-  cc26xx_web_demo_config.def_rt_ping_interval =
-      CC26XX_WEB_DEMO_DEFAULT_RSSI_MEAS_INTERVAL;
+  alstom_mqtt_iot_config.sensors_bitmap = 0xFFFFFFFF; /* all on by default */
+  alstom_mqtt_iot_config.def_rt_ping_interval = ALSTOM_MQTT_IOT_DEFAULT_RSSI_MEAS_INTERVAL;
   load_config();                                                                  //Carga la configuración
 
   /*
    * Notify all other processes (basically the ones in this demo) that the
    * configuration has been loaded from flash, in case they care
    */
-  process_post(PROCESS_BROADCAST, cc26xx_web_demo_config_loaded_event, NULL);
+  process_post(PROCESS_BROADCAST, alstom_mqtt_iot_config_loaded_event, NULL);
 
   init_sensor_readings();                                                                                     //Inicia lectura de Sensores
 
   def_rt_rssi = 0x8000000;
   uip_icmp6_echo_reply_callback_add(&echo_reply_notification,
                                     echo_reply_handler);
-  etimer_set(&echo_request_timer, CC26XX_WEB_DEMO_NET_CONNECT_PERIODIC);
+  etimer_set(&echo_request_timer, ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC);
 
-  etimer_set(&et, CC26XX_WEB_DEMO_NET_CONNECT_PERIODIC);
+  etimer_set(&et, ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC);
 
   /*
    * Update all sensor readings on a configurable sensors_event
@@ -787,28 +786,28 @@ PROCESS_THREAD(cc26xx_web_demo_process, ev, data)
   while(1) {
     if(ev == PROCESS_EVENT_TIMER && etimer_expired(&et)) {
       if(uip_ds6_get_global(ADDR_PREFERRED) == NULL) {
-        leds_on(CC26XX_WEB_DEMO_STATUS_LED);
+        leds_on(ALSTOM_MQTT_IOT_STATUS_LED);
         ctimer_set(&ct, NO_NET_LED_DURATION, publish_led_off, NULL);
-        etimer_set(&et, CC26XX_WEB_DEMO_NET_CONNECT_PERIODIC);
+        etimer_set(&et, ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC);
       }
     }
 
     if(ev == PROCESS_EVENT_TIMER && etimer_expired(&echo_request_timer)) {
       if(uip_ds6_get_global(ADDR_PREFERRED) == NULL) {
-        etimer_set(&echo_request_timer, CC26XX_WEB_DEMO_NET_CONNECT_PERIODIC);
+        etimer_set(&echo_request_timer, ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC);
       } else {
         ping_parent();
-        etimer_set(&echo_request_timer, cc26xx_web_demo_config.def_rt_ping_interval);
+        etimer_set(&echo_request_timer, alstom_mqtt_iot_config.def_rt_ping_interval);
       }
     }
 
-    if(ev == sensors_event && data == CC26XX_WEB_DEMO_SENSOR_READING_TRIGGER) {
-      if((CC26XX_WEB_DEMO_SENSOR_READING_TRIGGER)->value(BUTTON_SENSOR_VALUE_DURATION) > CLOCK_SECOND * 5) {
+    if(ev == sensors_event && data == ALSTOM_MQTT_IOT_SENSOR_READING_TRIGGER) {
+      if((ALSTOM_MQTT_IOT_SENSOR_READING_TRIGGER)->value(BUTTON_SENSOR_VALUE_DURATION) > CLOCK_SECOND * 5) {
         printf("Restoring defaults!\n");
-        cc26xx_web_demo_restore_defaults();
+        alstom_mqtt_iot_restore_defaults();
       } else {
         init_sensor_readings();
-        process_post(PROCESS_BROADCAST, cc26xx_web_demo_publish_event, NULL);
+        process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event, NULL);
       }
     } else if(ev == sensors_event && data == &bmp_280_sensor) {
       get_bmp_reading();

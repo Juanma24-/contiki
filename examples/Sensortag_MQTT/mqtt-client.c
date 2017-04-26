@@ -46,7 +46,7 @@
 #include "lib/sensors.h"
 #include "button-sensor.h"
 #include "board-peripherals.h"
-#include "cc26xx-web-demo.h"
+#include "alstom-mqtt-iot.h"
 #include "dev/leds.h"
 #include "mqtt-client.h"
 
@@ -120,7 +120,6 @@ static char client_id[BUFFER_SIZE];
 static char pub_topic[BUFFER_SIZE];
 static char sub_topic_Act[BUFFER_SIZE];
 static char sub_topic_OpMask[BUFFER_SIZE];
-static char tipo_op[5]="PIN01";
 /*---------------------------------------------------------------------------*/
 /*
  * The main MQTT buffers.
@@ -143,7 +142,7 @@ static uip_ip6addr_t def_route;
 /* Parent RSSI functionality */
 extern int def_rt_rssi;
 /*---------------------------------------------------------------------------*/
-const static cc26xx_web_demo_sensor_reading_t *reading;
+const static alstom_mqtt_iot_sensor_reading_t *reading;
 /*---------------------------------------------------------------------------*/
 mqtt_client_config_t *conf;
 /*---------------------------------------------------------------------------*/
@@ -152,7 +151,7 @@ PROCESS(mqtt_client_process, "CC26XX MQTT Client");
 static void
 publish_led_off(void *d)                                                                  //APAGA EL LED
 {
-  leds_off(CC26XX_WEB_DEMO_STATUS_LED);
+  leds_off(ALSTOM_MQTT_IOT_STATUS_LED);
 }
 /*---------------------------------------------------------------------------*/
 //Revisar Numeros
@@ -213,7 +212,7 @@ pub_handler_OpMask(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   /*SEGURIDAD:se comprueba que el topic termina en Op_Mask. Permite añadir topics en el mismo nivel*/
   if(strncmp(&topic[topic_len - 7],"Op_Mask",7) == 0){
   	for(i=0;i<chunk_len;i++){
-  		tipo_op[i] = chunk[i];
+  		conf->tipo_op[i] = chunk[i];
   	}
   	state = MQTT_CLIENT_STATE_NEWCONFIG;
     mqtt_disconnect(&conn);
@@ -304,7 +303,7 @@ construct_pub_topic(void)
 static int
 construct_sub_topic(void)
 {
-  int len1 = snprintf(sub_topic_Act, BUFFER_SIZE, "%s/%s/leds",conf->sala,tipo_op);
+  int len1 = snprintf(sub_topic_Act, BUFFER_SIZE, "%s/%s/leds",conf->sala,conf->tipo_op);
   /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
   if(len1 < 0 || len1 >= BUFFER_SIZE) {
     printf("Sub Topic: %d, Buffer %d\n", len1, BUFFER_SIZE);
@@ -318,7 +317,7 @@ construct_sub_topic(void)
   return 1;
 }
 /*---------------------------------------------------------------------------*/
-/*CONSTRUYE EL CLIENT_ID A PARTIR DE ORG_ID, TYPE_ID Y LA DIRECCION MAC (DEVICE_ID) SEGÚN EL FORMATO
+/*CONSTRUYE EL CLIENT_ID A PARTIR DE LA DIRECCION MAC (DEVICE_ID) SEGÚN EL FORMATO
 d:<Device_ID>, SIMPLIFICADO DE d:<ORG_ID>:<Type_ID>:<Device_ID>*/
 static int
 construct_client_id(void)                                                                 
@@ -381,22 +380,23 @@ update_config(void)
   return;
 }
 /*---------------------------------------------------------------------------*/
-/*INICIAR CONFIGURACIÓN, COPIA TODAS LAS CONSTANTES EN LA ESTRUCUTURA CONF*/
+/*INICIAR CONFIGURACIÓN, COPIA TODAS LAS CONSTANTES EN LA ESTRUCUTURA CONF
+LAS LONGITUDES TIENEN QUE SER AJUSTADAS SI SE MODIFICA ALGUNO DE LOS PARÁMETROS*/
 static int
 init_config()
 {
   /* Populate configuration with default values */
   memset(conf, 0, sizeof(mqtt_client_config_t));
   /*Eliminado la copia de Org_ID y Type_ID ya que client_ID no se forma con ellos*/
-  memcpy(conf->event_type_id, CC26XX_WEB_DEMO_DEFAULT_EVENT_TYPE_ID, 7);
+  memcpy(conf->event_type_id, ALSTOM_MQTT_IOT_DEFAULT_EVENT_TYPE_ID, 7);
   memcpy(conf->broker_ip, broker_ip, strlen(broker_ip));
-  memcpy(conf->cmd_type, CC26XX_WEB_DEMO_DEFAULT_SUBSCRIBE_CMD_TYPE, 1);
-  memcpy(conf->user_id,CC26XX_WEB_DEMO_DEFAULT_USERNAME_ID,24);
-  memcpy(conf->auth_token, AUTH_TOKEN, 20);
-  memcpy(conf->sala,CC26XX_WEB_DEMO_DEFAULT_SALA,5);
+  memcpy(conf->cmd_type, ALSTOM_MQTT_IOT_DEFAULT_SUBSCRIBE_CMD_TYPE, 1);
+  memcpy(conf->user_id,ALSTOM_MQTT_IOT_DEFAULT_USERNAME_ID,24);
+  memcpy(conf->auth_token, ALSTOM_MQTT_IOT_DEFAULT_AUTH_TOKEN, 20);
+  memcpy(conf->sala,ALSTOM_MQTT_IOT_DEFAULT_SALA,5);
 
-  conf->broker_port = CC26XX_WEB_DEMO_DEFAULT_BROKER_PORT;
-  conf->pub_interval = CC26XX_WEB_DEMO_DEFAULT_PUBLISH_INTERVAL;
+  conf->broker_port = ALSTOM_MQTT_IOT_DEFAULT_BROKER_PORT;
+  conf->pub_interval = ALSTOM_MQTT_IOT_DEFAULT_PUBLISH_INTERVAL;
 
   return 1;
 }
@@ -454,7 +454,7 @@ publish(void)
 
   /* Put our Default route's string representation in a buffer */
   memset(def_rt_str, 0, sizeof(def_rt_str));
-  cc26xx_web_demo_ipaddr_sprintf(def_rt_str, sizeof(def_rt_str),
+  alstom_mqtt_iot_ipaddr_sprintf(def_rt_str, sizeof(def_rt_str),
                                  uip_ds6_defrt_choose());
 
   len = snprintf(buf_ptr, remaining, ",\"Def Route\":\"%s\",\"RSSI (dBm)\":%d",                     //DIRECCION Y RSSI
@@ -469,7 +469,7 @@ publish(void)
 
   memcpy(&def_route, uip_ds6_defrt_choose(), sizeof(uip_ip6addr_t));
 
-  for(reading = cc26xx_web_demo_sensor_first();
+  for(reading = alstom_mqtt_iot_sensor_first();
       reading != NULL; reading = reading->next) {
     if(reading->publish && reading->raw != CC26XX_SENSOR_READING_ERROR) {
       len = snprintf(buf_ptr, remaining,
@@ -549,12 +549,12 @@ state_machine(void)
       DBG("Registered. Connect attempt %u\n", connect_attempt);
       connect_to_broker();
     }
-    etimer_set(&publish_periodic_timer, CC26XX_WEB_DEMO_NET_CONNECT_PERIODIC);
+    etimer_set(&publish_periodic_timer, ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC);
     return;
     break;
   /*Estableciendo conexión, enciende el led verde*/
   case MQTT_CLIENT_STATE_CONNECTING:
-    leds_on(CC26XX_WEB_DEMO_STATUS_LED);
+    leds_on(ALSTOM_MQTT_IOT_STATUS_LED);
     ctimer_set(&ct, CONNECTING_LED_DURATION, publish_led_off, NULL);
     /* Not connected yet. Wait */
     DBG("Connecting (%u)\n", connect_attempt);
@@ -583,7 +583,7 @@ state_machine(void)
         subscribe();                                                          //Subscribe a los topics
         state = MQTT_CLIENT_STATE_PUBLISHING;
       } else {
-        leds_on(CC26XX_WEB_DEMO_STATUS_LED);                                  //Enciende LED verde
+        leds_on(ALSTOM_MQTT_IOT_STATUS_LED);                                  //Enciende LED verde
         ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL);
         publish();                                                            //Publica
       }
@@ -648,7 +648,7 @@ state_machine(void)
     return;
   case MQTT_CLIENT_STATE_ERROR:
   default:
-    leds_on(CC26XX_WEB_DEMO_STATUS_LED);
+    leds_on(ALSTOM_MQTT_IOT_STATUS_LED);
     /*
      * 'default' should never happen.
      *
@@ -670,7 +670,7 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
 
   printf("CC26XX MQTT Client Process\n");
 
-  conf = &cc26xx_web_demo_config.mqtt_config;          //Carga la configuración 
+  conf = &alstom_mqtt_iot_config.mqtt_config;          //Carga la configuración 
   if(init_config() != 1) {                             //Ejecuta init_config, cargando la estructura de configuración del cliente
     PROCESS_EXIT();
   }
@@ -682,7 +682,7 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
 
     PROCESS_YIELD();
     /*Si llega evento de sensores (disparo de publicación)*/
-    if(ev == sensors_event && data == CC26XX_WEB_DEMO_MQTT_PUBLISH_TRIGGER) {
+    if(ev == sensors_event && data == ALSTOM_MQTT_IOT_MQTT_PUBLISH_TRIGGER) {
       if(state == MQTT_CLIENT_STATE_ERROR) {
         connect_attempt = 1;
         state = MQTT_CLIENT_STATE_REGISTERED;
@@ -692,12 +692,12 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
      publicacion o evento de sensores*/
     if((ev == PROCESS_EVENT_TIMER && data == &publish_periodic_timer) ||
        ev == PROCESS_EVENT_POLL ||
-       ev == cc26xx_web_demo_publish_event ||
-       (ev == sensors_event && data == CC26XX_WEB_DEMO_MQTT_PUBLISH_TRIGGER)) {
+       ev == alstom_mqtt_iot_publish_event ||
+       (ev == sensors_event && data == ALSTOM_MQTT_IOT_MQTT_PUBLISH_TRIGGER)) {
       state_machine();
     }
     /*Si salta evento de carga de configuracion por defecto*/
-    if(ev == cc26xx_web_demo_load_config_defaults) {
+    if(ev == alstom_mqtt_iot_load_config_defaults) {
       init_config();
       etimer_set(&publish_periodic_timer, NEW_CONFIG_WAIT_INTERVAL);
     }

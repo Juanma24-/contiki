@@ -36,9 +36,6 @@
 #define RF_CORE_CONF_CHANNEL                 25
 #define RF_BLE_CONF_ENABLED                   0
 /*---------------------------------------------------------------------------*/
-/* Enable/Disable Components of this Demo */
-#define CC26XX_WEB_DEMO_CONF_MQTT_CLIENT      1
-/*---------------------------------------------------------------------------*/
 /* Enable the ROM bootloader */
 #define ROM_BOOTLOADER_ENABLE                 1
 #define BUTTON_SENSOR_CONF_ENABLE_SHUTDOWN    1
