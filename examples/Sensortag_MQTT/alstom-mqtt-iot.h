@@ -56,6 +56,7 @@
 /* User configuration */
 /* Take a sensor reading on button press */
 #define ALSTOM_MQTT_IOT_SENSOR_READING_TRIGGER &button_left_sensor
+#define ALSTOM_MQTT_IOT_OP_LED_OFF &button_right_sensor
 
 /* Payload length of ICMPv6 echo requests used to measure RSSI with def rt */
 #define ALSTOM_MQTT_IOT_ECHO_REQ_PAYLOAD_LEN   20

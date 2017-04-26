@@ -403,7 +403,7 @@ init_config()
 
 /*---------------------------------------------------------------------------*/
 /*REALIZA LA SUBCRIPCIÓN A UN TOPIC PREVIAMENTE PREPARADO EN CONSTRUCT_SUB_TOPIC.
-IMPORTANTE: NIVEL DE QoS == 0 (SOLO SE ENVIA UNA VEZ)*/
+IMPORTANTE: NIVEL DE QoS == 1 */
 static void
 subscribe()
 {
@@ -411,13 +411,13 @@ subscribe()
   mqtt_status_t status;
 
   DBG("APP - Subscribing!\n");
-  status = mqtt_subscribe(&conn, NULL, sub_topic_Act, MQTT_QOS_LEVEL_0);
+  status = mqtt_subscribe(&conn, NULL, sub_topic_Act, MQTT_QOS_LEVEL_1);
   if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
     DBG("APP - Tried to subscribe but command queue was full!\n");
   }
   /*Espera mientras mqtt no esté listo, cuando esté listo, se subscribe al siguiente topic*/
   while(!mqtt_ready(&conn)){};
-  status = mqtt_subscribe(&conn, NULL, sub_topic_OpMask, MQTT_QOS_LEVEL_0);
+  status = mqtt_subscribe(&conn, NULL, sub_topic_OpMask, MQTT_QOS_LEVEL_1);
   if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
     DBG("APP - Tried to subscribe but command queue was full!\n");
   }
@@ -700,6 +700,12 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
     if(ev == alstom_mqtt_iot_load_config_defaults) {
       init_config();
       etimer_set(&publish_periodic_timer, NEW_CONFIG_WAIT_INTERVAL);
+    }
+    /*
+    * Si el operario pulsa el botón se apaga el led del sensortag
+    */
+    if(ev == sensors_event && data == ALSTOM_MQTT_IOT_OP_LED_OFF){
+      leds_off(ALSTOM_MQTT_IOT_STATUS_LED);
     }
   }
 
