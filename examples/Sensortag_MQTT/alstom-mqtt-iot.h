@@ -56,7 +56,7 @@
 /* User configuration */
 /* Take a sensor reading on button press */
 #define ALSTOM_MQTT_IOT_SENSOR_READING_TRIGGER &button_left_sensor
-#define ALSTOM_MQTT_IOT_OP_LED_OFF &button_right_sensor
+#define ALSTOM_MQTT_IOT_OP_LED_OFF &button_left_sensor
 
 /* Payload length of ICMPv6 echo requests used to measure RSSI with def rt */
 #define ALSTOM_MQTT_IOT_ECHO_REQ_PAYLOAD_LEN   20
@@ -66,6 +66,7 @@
 
 
 #define ALSTOM_MQTT_IOT_STATUS_LED LEDS_GREEN
+#define ALSTOM_MQTT_IOT_OP_LED LEDS_RED
 /*---------------------------------------------------------------------------*/
 /* A timeout used when waiting to connect to a network */
 #define ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC        (CLOCK_SECOND >> 3)
@@ -76,9 +77,10 @@
 #define ALSTOM_MQTT_IOT_DEFAULT_EVENT_TYPE_ID       "status"
 #define ALSTOM_MQTT_IOT_DEFAULT_SUBSCRIBE_CMD_TYPE  "+"
 #define ALSTOM_MQTT_IOT_DEFAULT_SALA                "A01"
-#define ALSTOM_MQTT_IOT_DEFAULT_TIPO_OP             "PIN01"  
+#define ALSTOM_MQTT_IOT_DEFAULT_TIPO_OP             "PIN01" 
+
 #define ALSTOM_MQTT_IOT_DEFAULT_BROKER_PORT         1883
-#define ALSTOM_MQTT_IOT_DEFAULT_PUBLISH_INTERVAL    (30 * CLOCK_SECOND)
+#define ALSTOM_MQTT_IOT_DEFAULT_PUBLISH_INTERVAL    (120 * CLOCK_SECOND)
 #define ALSTOM_MQTT_IOT_DEFAULT_KEEP_ALIVE_TIMER    60
 #define ALSTOM_MQTT_IOT_DEFAULT_RSSI_MEAS_INTERVAL  (CLOCK_SECOND * 30)
 /*---------------------------------------------------------------------------*/

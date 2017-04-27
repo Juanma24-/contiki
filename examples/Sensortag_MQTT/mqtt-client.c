@@ -146,6 +146,8 @@ const static alstom_mqtt_iot_sensor_reading_t *reading;
 /*---------------------------------------------------------------------------*/
 mqtt_client_config_t *conf;
 /*---------------------------------------------------------------------------*/
+int flag_sub_topic = 0;
+/*---------------------------------------------------------------------------*/
 PROCESS(mqtt_client_process, "CC26XX MQTT Client");
 /*---------------------------------------------------------------------------*/
 static void
@@ -220,6 +222,8 @@ pub_handler_OpMask(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   }
 }
 /*---------------------------------------------------------------------------*/
+
+/*---------------------------------------------------------------------------*/
 /*Es el handler que se ejecuta con las interrupciones de conexión del cliente (mqtt_register)*/
 static void
 mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
@@ -267,6 +271,8 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
   /*Subscripcion a topic realizada con éxito*/
   case MQTT_EVENT_SUBACK: {
     DBG("APP - Application is subscribed to topic successfully\n");
+    flag_sub_topic = flag_sub_topic + 1;
+    /*Ya se ha subscrito a los topics básicos, ahora se subscribe al resto, disparandolos según el valor del flag*/
     break;
   }
   /*Des-subscripcion realizada con éxito*/
@@ -288,8 +294,8 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
 static int
 construct_pub_topic(void)
 {
-  int len = snprintf(pub_topic, BUFFER_SIZE, "A01/Sensortag/%s/fmt/json",
-                     conf->event_type_id);
+  int len = snprintf(pub_topic, BUFFER_SIZE, "%s/Sensortag/%s/fmt/json",
+                     conf->sala,conf->event_type_id);
 
   /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
   if(len < 0 || len >= BUFFER_SIZE) {
@@ -304,12 +310,14 @@ static int
 construct_sub_topic(void)
 {
   int len1 = snprintf(sub_topic_Act, BUFFER_SIZE, "%s/%s/leds",conf->sala,conf->tipo_op);
+  DBG("Creado topic: %s/%s/leds\n",conf->sala,conf->tipo_op);
   /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
   if(len1 < 0 || len1 >= BUFFER_SIZE) {
     printf("Sub Topic: %d, Buffer %d\n", len1, BUFFER_SIZE);
     return 0;
   }
   int len = snprintf(sub_topic_OpMask,BUFFER_SIZE,"%s/%s/Op_Mask",conf->sala,client_id);
+  DBG("Creado topic: %s/%s/Op_Mask\n",conf->sala,client_id);
   if(len < 0 || len >= BUFFER_SIZE) {
     printf("Sub Topic: %d, Buffer %d\n", len, BUFFER_SIZE);
     return 0;
@@ -364,6 +372,7 @@ update_config(void)
 
   /* Reset the counter */
   seq_nr_value = 0;
+  flag_sub_topic = 0;
   /*Resetea el cliente, imponiendo un estado de inicio de nuevo*/
   state = MQTT_CLIENT_STATE_INIT;
 
@@ -393,8 +402,8 @@ init_config()
   memcpy(conf->cmd_type, ALSTOM_MQTT_IOT_DEFAULT_SUBSCRIBE_CMD_TYPE, 1);
   memcpy(conf->user_id,ALSTOM_MQTT_IOT_DEFAULT_USERNAME_ID,24);
   memcpy(conf->auth_token, ALSTOM_MQTT_IOT_DEFAULT_AUTH_TOKEN, 20);
-  memcpy(conf->sala,ALSTOM_MQTT_IOT_DEFAULT_SALA,5);
-
+  memcpy(conf->tipo_op,ALSTOM_MQTT_IOT_DEFAULT_TIPO_OP,5);
+  memcpy(conf->sala,ALSTOM_MQTT_IOT_DEFAULT_SALA,3);
   conf->broker_port = ALSTOM_MQTT_IOT_DEFAULT_BROKER_PORT;
   conf->pub_interval = ALSTOM_MQTT_IOT_DEFAULT_PUBLISH_INTERVAL;
 
@@ -415,8 +424,14 @@ subscribe()
   if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
     DBG("APP - Tried to subscribe but command queue was full!\n");
   }
+}
+static void
+subscribe_topic_op()
+{
+  DBG("APP - Subscribing!\n");
+  /* Publish MQTT topic in IBM quickstart format */
+  mqtt_status_t status;
   /*Espera mientras mqtt no esté listo, cuando esté listo, se subscribe al siguiente topic*/
-  while(!mqtt_ready(&conn)){};
   status = mqtt_subscribe(&conn, NULL, sub_topic_OpMask, MQTT_QOS_LEVEL_1);
   if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
     DBG("APP - Tried to subscribe but command queue was full!\n");
@@ -561,11 +576,6 @@ state_machine(void)
     break;
   /*Cliente conectado a Broker con éxito, es disparado por mqtt_event*/
   case MQTT_CLIENT_STATE_CONNECTED:
-    /* Don't subscribe unless we are a registered device */
-    //if(strncasecmp(conf->org_id, QUICKSTART, strlen(conf->org_id)) == 0) {
-    //  DBG("Using 'quickstart': Skipping subscribe\n");
-      state = MQTT_CLIENT_STATE_PUBLISHING;
-    //}
     /* Continue */
   case MQTT_CLIENT_STATE_PUBLISHING:
     /* If the timer expired, the connection is stable. */
@@ -580,8 +590,19 @@ state_machine(void)
     if(mqtt_ready(&conn) && conn.out_buffer_sent) {                           //Conexion lista
       /* Connected. Publish */
       if(state == MQTT_CLIENT_STATE_CONNECTED) {                              //Si el estado es CONNECTED
-        subscribe();                                                          //Subscribe a los topics
-        state = MQTT_CLIENT_STATE_PUBLISHING;
+        switch (flag_sub_topic){
+          case 0:{
+            subscribe();
+            break;                                                          //Subscribe a los topics
+          }
+          case 1:{
+            subscribe_topic_op();
+            break;
+          }
+          default:  
+            state = MQTT_CLIENT_STATE_PUBLISHING;
+            break;
+          }
       } else {
         leds_on(ALSTOM_MQTT_IOT_STATUS_LED);                                  //Enciende LED verde
         ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL);
@@ -705,7 +726,7 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
     * Si el operario pulsa el botón se apaga el led del sensortag
     */
     if(ev == sensors_event && data == ALSTOM_MQTT_IOT_OP_LED_OFF){
-      leds_off(ALSTOM_MQTT_IOT_STATUS_LED);
+      leds_off(ALSTOM_MQTT_IOT_OP_LED);
     }
   }
 
