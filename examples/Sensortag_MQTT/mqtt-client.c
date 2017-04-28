@@ -248,7 +248,7 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
     /*
     else{
       process_poll(&mqtt_client_process);
-    }
+    }*/
     break;
   }
   /*RECIBE una nueva publicacion de algún tema subscrito*/
