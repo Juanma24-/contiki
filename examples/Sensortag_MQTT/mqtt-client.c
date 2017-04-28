@@ -245,6 +245,10 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
       state = MQTT_CLIENT_STATE_DISCONNECTED;
       process_poll(&mqtt_client_process);
     }
+    /*
+    else{
+      process_poll(&mqtt_client_process);
+    }
     break;
   }
   /*RECIBE una nueva publicacion de algún tema subscrito*/
@@ -576,6 +580,8 @@ state_machine(void)
     break;
   /*Cliente conectado a Broker con éxito, es disparado por mqtt_event*/
   case MQTT_CLIENT_STATE_CONNECTED:
+    /*MUY IMPORTANTE: No hay break por lo qeu aunque el estado es CONNECTED,
+    se ejecuta código de PUBLISHING*/
     /* Continue */
   case MQTT_CLIENT_STATE_PUBLISHING:
     /* If the timer expired, the connection is stable. */
@@ -590,10 +596,15 @@ state_machine(void)
     if(mqtt_ready(&conn) && conn.out_buffer_sent) {                           //Conexion lista
       /* Connected. Publish */
       if(state == MQTT_CLIENT_STATE_CONNECTED) {                              //Si el estado es CONNECTED
-        switch (flag_sub_topic){
+        /*
+        * Dependiendo el valor de la bandera nos permite subscribirnos 
+        * a diferentes topics,para acelerar el proceso se fuerza la 
+        * ejecucion recursiva de state_machine.
+        */
+        switch (flag_sub_topic){                                              
           case 0:{
             subscribe();
-            break;                                                          //Subscribe a los topics
+            break;                                                          
           }
           case 1:{
             subscribe_topic_op();
@@ -603,6 +614,8 @@ state_machine(void)
             state = MQTT_CLIENT_STATE_PUBLISHING;
             break;
           }
+          //state_machine();
+          process_poll(&mqtt_client_process);
       } else {
         leds_on(ALSTOM_MQTT_IOT_STATUS_LED);                                  //Enciende LED verde
         ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL);
@@ -623,8 +636,7 @@ state_machine(void)
        * trigger a new message and we wait for TCP to either ACK the entire
        * packet after retries, or to timeout and notify us.
        */
-      DBG("Publishing... (MQTT state=%d, q=%u)\n", conn.state,
-          conn.out_queue_full);
+      DBG("Publishing... (MQTT state=%d, q=%u)\n", conn.state,conn.out_queue_full);
     }
     break;
   /*Estado de desconexión*/
