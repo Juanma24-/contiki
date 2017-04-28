@@ -32,6 +32,8 @@
 #ifndef ENC28J60_H
 #define ENC28J60_H
 
+#include "stdint.h"
+
 void enc28j60_init(const uint8_t *mac_addr);
 
 int enc28j60_send(const uint8_t *data, uint16_t datalen);
