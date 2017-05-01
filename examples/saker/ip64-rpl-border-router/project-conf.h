@@ -104,7 +104,6 @@
 #else
 #define UIP_FALLBACK_INTERFACE                  ip64_eth_interface
 #endif
-
 /*Activación de noncoredriver como capa de seguridad*/	
 #undef LLSEC802154_CONF_ENABLED
 #define LLSEC802154_CONF_ENABLED          1
@@ -118,6 +117,5 @@
                               0x04 , 0x05 , 0x06 , 0x07 , \
                               0x08 , 0x09 , 0x0A , 0x0B , \
                               0x0C , 0x0D , 0x0E , 0x0F } 
-
 #endif /* PROJECT_CONF_H_ */
 
