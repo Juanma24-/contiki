@@ -30,10 +30,10 @@ El topic de configuración permite cambiar la subscripción del topic se operaci
 `sala/client-id/Op_Mask`  
 Al igual que para operación, las longitudes de cada parámetro están regladas:  
 * sala -> 3 caracteres. Ej: A01
-* client_id -> 14 caracteres. Sigue un esquema prefijado: `d:00124bABCDEFG` siendo fijos los caracteres d:00124b y variables ABCDEFG. Estos caracteres variables corresponden a los 6 últimos dígitos de la dirección MAC del dispositivo (puede ser consultada en el programa Uniflash.
+* client_id -> 14 caracteres. Sigue un esquema prefijado: `d:00124bABCDEFG` siendo fijos los caracteres d:00124b y variables ABCDEFG.Los carcteres fijos correponden a los 6 primeros dígitos hexadecimales de la dirección IEEE configurada en contiki-conf.h (dentro de la carpeta de la plataforma srf06-cc26xx) mediante la constante IEEE_ADDR_CONF_ADDRESS. Los caracteres variables corresponden a los 6 últimos dígitos de la dirección MAC del dispositivo (puede ser consultada en el programa Uniflash.
 * Op_Mask -> 7 caracteres. Es fijo y no modificable.
 El total de caracteres de este topic sería 3+1+14+1+7 (contando slashes) = 26. Por ejemplo: `A01/d:00124b30BCE8/Op_Mask`.  
-Al igual que con el topics de operación el topic sala ebe ser configurado antes de compilar el código. Este parámetro es compartido entre ambos topics (no tendría sentido de otra forma). Client-id viene fijado por el propio dispositivo y no es modificable, es un identificador único de cada Sensortag, y es lo que permite configurar cada uno de forma individual.
+Al igual que con el topics de operación el topic sala debe ser configurado antes de compilar el código. Este parámetro es compartido entre ambos topics (no tendría sentido de otra forma). Client-id viene fijado por el propio dispositivo y no es modificable, es un identificador único de cada Sensortag, y es lo que permite configurar cada uno de forma individual.
 
  
 
