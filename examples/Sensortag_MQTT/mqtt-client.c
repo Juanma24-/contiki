@@ -201,13 +201,13 @@ pub_handler_OpMask(const char *topic, uint16_t topic_len, const uint8_t *chunk,
     /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
     con los esperados
     If we don't like the length, ignore*/ 
-  if((chunk_len != 5)||(topic_len!=20)) {
+  if((chunk_len != 5)||(topic_len!=26)) {
     	printf("Incorrect topic or chunk len. Ignored\n");
     	return;
   }
 
   /* Se comprueba si el mensaje iba para este Sensortag comprobando que coinciden los client_ID*/ 
-  if(strncmp(&topic[4], client_id, 8) != 0) {				//Si las cadenas no son iguales
+  if(strncmp(&topic[4], client_id, 14) != 0) {				//Si las cadenas no son iguales
     printf("Incorrect format\n");
     return;
   }
@@ -245,10 +245,10 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
       state = MQTT_CLIENT_STATE_DISCONNECTED;
       process_poll(&mqtt_client_process);
     }
-    /*
     else{
+      state = MQTT_CLIENT_STATE_NEWCONFIG;
       process_poll(&mqtt_client_process);
-    }*/
+    }
     break;
   }
   /*RECIBE una nueva publicacion de algún tema subscrito*/
