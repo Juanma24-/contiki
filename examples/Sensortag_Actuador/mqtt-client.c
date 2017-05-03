@@ -61,8 +61,7 @@
  * If the node has a broker IP setting saved on flash, this value here will
  * get ignored
  */
-/*static const char *broker_ip = "0064:ff9b:0000:0000:0000:0000:b8ac:7cbd";*/
-/*static const char *broker_ip = "0000:0000:0000:0000:0000:ffff:b8ac:7cbd";*/
+
 static const char *broker_ip = "0000:0000:0000:0000:0000:ffff:c0a8:012f";
 /*---------------------------------------------------------------------------*/
 /*
@@ -119,7 +118,7 @@ static uint8_t state;
 static char client_id[BUFFER_SIZE];
 static char pub_topic[BUFFER_SIZE];
 static char sub_topic_Act[BUFFER_SIZE];
-static char sub_topic_Conf1[BUFFER_SIZE];
+static char sub_topic_Conf[BUFFER_SIZE];
 /*---------------------------------------------------------------------------*/
 /*
  * The main MQTT buffers.
@@ -327,8 +326,8 @@ construct_sub_topic(void)
     printf("Sub Topic: %d, Buffer %d\n", len, BUFFER_SIZE);
     return 0;
   }
-  int len1 = snprintf(sub_topic_Conf1,BUFFER_SIZE,"%s/%s/Conf/1",conf->sala,client_id);
-  DBG("Creado topic: %s/%s/Conf\n",conf->sala,client_id);
+  int len1 = snprintf(sub_topic_Conf,BUFFER_SIZE,"%s/%s/Conf/%s",conf->sala,client_id,conf->cmd_type);
+  DBG("Creado topic: %s/%s/Conf/%s\n",conf->sala,client_id,conf->cmd_type);
   if(len1 < 0 || len1 >= BUFFER_SIZE) {
     printf("Sub Topic: %d, Buffer %d\n", len1, BUFFER_SIZE);
     return 0;
@@ -440,7 +439,7 @@ subscribe()
     }
     case 1:{
       DBG("APP - Subscribing!\n");
-      status = mqtt_subscribe(&conn, NULL, sub_topic_Conf1, MQTT_QOS_LEVEL_1);
+      status = mqtt_subscribe(&conn, NULL, sub_topic_Conf, MQTT_QOS_LEVEL_1);
       if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
         DBG("APP - Tried to subscribe but command queue was full!\n");
       }   
