@@ -119,7 +119,7 @@ static uint8_t state;
 static char client_id[BUFFER_SIZE];
 static char pub_topic[BUFFER_SIZE];
 static char sub_topic_Act[BUFFER_SIZE];
-static char sub_topic_OpMask[BUFFER_SIZE];
+static char sub_topic_Conf1[BUFFER_SIZE];
 /*---------------------------------------------------------------------------*/
 /*
  * The main MQTT buffers.
@@ -161,8 +161,7 @@ static void
 pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
             uint16_t chunk_len)
 {
-  DBG("Pub Handler: topic='%s' (len=%u), chunk_len=%u\n", topic, topic_len,
-      chunk_len);
+  DBG("Pub Handler: topic='%s' (len=%u), chunk_len=%u\n", topic, topic_len,chunk_len);
 
   /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
   con los esperados ya que siempre la longitud es fija*/
@@ -176,6 +175,9 @@ pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   se ignora. Es muy importante ya que en caso contrario se activaría en todas
   las operaciones*/ 
   if(strncmp(&topic[4], conf->tipo_op, 5) != 0) {				//Si las cadenas no son iguales
+    printf("Corresponde con el topic %s\n", conf->tipo_op);
+  }   //AÑADIR TANTOS ELSEIF COMO TOPICS HAYA
+  else{
     printf("Incorrect format\n");
     return;
   }
@@ -192,7 +194,7 @@ pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
 }
 /*---------------------------------------------------------------------------*/
 static void
-pub_handler_OpMask(const char *topic, uint16_t topic_len, const uint8_t *chunk,
+pub_handler_Conf(const char *topic, uint16_t topic_len, const uint8_t *chunk,
             uint16_t chunk_len)
 {
   int i;
@@ -201,7 +203,7 @@ pub_handler_OpMask(const char *topic, uint16_t topic_len, const uint8_t *chunk,
     /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
     con los esperados
     If we don't like the length, ignore*/ 
-  if((chunk_len != 5)||(topic_len!=23)) {
+  if((chunk_len != 5)||(topic_len!=25)) {
     	printf("Incorrect topic or chunk len. Ignored\n");
     	return;
   }
@@ -211,14 +213,19 @@ pub_handler_OpMask(const char *topic, uint16_t topic_len, const uint8_t *chunk,
     printf("Incorrect format\n");
     return;
   }
-  /*SEGURIDAD:se comprueba que el topic termina en Op_Mask. Permite añadir topics en el mismo nivel*/
-  if(strncmp(&topic[topic_len - 7],"Op_Mask",7) == 0){
-  	for(i=0;i<chunk_len;i++){
-  		conf->tipo_op[i] = chunk[i];
-  	}
-  	state = MQTT_CLIENT_STATE_NEWCONFIG;
-    mqtt_disconnect(&conn);
-  	return;
+  /*SEGURIDAD:se comprueba que el topic termina en Conf. Permite añadir topics en el mismo nivel*/
+  if(strncmp(&topic[topic_len - 6],"Conf",4) == 0){
+    if(strncmp(&topic[topic_len - 1],"1",1) == 0){
+  	   for(i=0;i<chunk_len;i++){
+  		    conf->tipo_op[i] = chunk[i];
+  	   }
+  	   state = MQTT_CLIENT_STATE_NEWCONFIG;
+       mqtt_disconnect(&conn);
+  	   return;
+    }
+    else{
+      return;
+    }
   }
 }
 /*---------------------------------------------------------------------------*/
@@ -266,8 +273,8 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
     	pub_handler_Act(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
                 msg_ptr->payload_length);
     }
-    if(strlen(msg_ptr->topic) == 23){
-    	pub_handler_OpMask(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
+    if(strlen(msg_ptr->topic) == 25){
+    	pub_handler_Conf(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
                 msg_ptr->payload_length);
     }
     break;
@@ -313,17 +320,17 @@ construct_pub_topic(void)
 static int
 construct_sub_topic(void)
 {
-  int len1 = snprintf(sub_topic_Act, BUFFER_SIZE, "%s/%s/leds",conf->sala,conf->tipo_op);
+  int len = snprintf(sub_topic_Act, BUFFER_SIZE, "%s/%s/leds",conf->sala,conf->tipo_op);
   DBG("Creado topic: %s/%s/leds\n",conf->sala,conf->tipo_op);
   /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
-  if(len1 < 0 || len1 >= BUFFER_SIZE) {
-    printf("Sub Topic: %d, Buffer %d\n", len1, BUFFER_SIZE);
-    return 0;
-  }
-  int len = snprintf(sub_topic_OpMask,BUFFER_SIZE,"%s/%s/Op_Mask",conf->sala,client_id);
-  DBG("Creado topic: %s/%s/Op_Mask\n",conf->sala,client_id);
   if(len < 0 || len >= BUFFER_SIZE) {
     printf("Sub Topic: %d, Buffer %d\n", len, BUFFER_SIZE);
+    return 0;
+  }
+  int len1 = snprintf(sub_topic_Conf1,BUFFER_SIZE,"%s/%s/Conf/1",conf->sala,client_id);
+  DBG("Creado topic: %s/%s/Conf\n",conf->sala,client_id);
+  if(len1 < 0 || len1 >= BUFFER_SIZE) {
+    printf("Sub Topic: %d, Buffer %d\n", len1, BUFFER_SIZE);
     return 0;
   }
   return 1;
@@ -422,23 +429,25 @@ subscribe()
 {
   /* Publish MQTT topic in IBM quickstart format */
   mqtt_status_t status;
-
-  DBG("APP - Subscribing!\n");
-  status = mqtt_subscribe(&conn, NULL, sub_topic_Act, MQTT_QOS_LEVEL_1);
-  if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
-    DBG("APP - Tried to subscribe but command queue was full!\n");
-  }
-}
-static void
-subscribe_topic_op()
-{
-  DBG("APP - Subscribing!\n");
-  /* Publish MQTT topic in IBM quickstart format */
-  mqtt_status_t status;
-  /*Espera mientras mqtt no esté listo, cuando esté listo, se subscribe al siguiente topic*/
-  status = mqtt_subscribe(&conn, NULL, sub_topic_OpMask, MQTT_QOS_LEVEL_1);
-  if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
-    DBG("APP - Tried to subscribe but command queue was full!\n");
+  switch (flag_sub_topic){
+    case 0:{
+      DBG("APP - Subscribing!\n");
+      status = mqtt_subscribe(&conn, NULL, sub_topic_Act, MQTT_QOS_LEVEL_1);
+      if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
+        DBG("APP - Tried to subscribe but command queue was full!\n");
+      }
+      break;
+    }
+    case 1:{
+      DBG("APP - Subscribing!\n");
+      status = mqtt_subscribe(&conn, NULL, sub_topic_Conf1, MQTT_QOS_LEVEL_1);
+      if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
+        DBG("APP - Tried to subscribe but command queue was full!\n");
+      }   
+      break;
+    }
+    default:
+      break;
   }
 }
 /*---------------------------------------------------------------------------*/
@@ -601,21 +610,12 @@ state_machine(void)
         * a diferentes topics,para acelerar el proceso se fuerza la 
         * ejecucion recursiva de state_machine.
         */
-        switch (flag_sub_topic){                                              
-          case 0:{
-            subscribe();
-            break;                                                          
-          }
-          case 1:{
-            subscribe_topic_op();
-            break;
-          }
-          default:  
-            state = MQTT_CLIENT_STATE_PUBLISHING;
-            break;
-          }
-          //state_machine();
-          process_poll(&mqtt_client_process);
+        if(flag_sub_topic<2){
+          subscribe();
+        }else{
+          state = MQTT_CLIENT_STATE_PUBLISHING;
+        }    
+        process_poll(&mqtt_client_process);
       } else {
         leds_on(ALSTOM_MQTT_IOT_STATUS_LED);                                  //Enciende LED verde
         ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL);
