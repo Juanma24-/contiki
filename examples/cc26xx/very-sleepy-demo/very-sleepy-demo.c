@@ -335,7 +335,7 @@ PROCESS_THREAD(very_sleepy_demo_process, ev, data)
 
   SENSORS_ACTIVATE(batmon_sensor);
 
-  config.mode = VERY_SLEEPY_MODE_OFF;
+  config.mode = VERY_SLEEPY_MODE_ON;
   config.interval = PERIODIC_INTERVAL_DEFAULT;
   config.duration = NORMAL_OP_DURATION_DEFAULT;
 

@@ -723,10 +723,7 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
     }
     /*Si salta el timer de publicación periodica, evento de pooling (disparado por desconexión),
      publicacion o evento de sensores*/
-    if((ev == PROCESS_EVENT_TIMER && data == &publish_periodic_timer) ||
-       ev == PROCESS_EVENT_POLL ||
-       ev == alstom_mqtt_iot_publish_event ||
-       (ev == sensors_event && data == ALSTOM_MQTT_IOT_MQTT_PUBLISH_TRIGGER)) {
+    if((ev == PROCESS_EVENT_TIMER && data == &publish_periodic_timer) || ev == PROCESS_EVENT_POLL ||ev == alstom_mqtt_iot_publish_event ||(ev == sensors_event && data == ALSTOM_MQTT_IOT_MQTT_PUBLISH_TRIGGER)) {
       state_machine();
     }
     /*Si salta evento de carga de configuracion por defecto*/
