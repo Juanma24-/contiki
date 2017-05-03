@@ -201,7 +201,7 @@ pub_handler_OpMask(const char *topic, uint16_t topic_len, const uint8_t *chunk,
     /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
     con los esperados
     If we don't like the length, ignore*/ 
-  if((chunk_len != 5)||(topic_len!=20)) {
+  if((chunk_len != 5)||(topic_len!=26)) {
     	printf("Incorrect topic or chunk len. Ignored\n");
     	return;
   }
@@ -266,7 +266,7 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
     	pub_handler_Act(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
                 msg_ptr->payload_length);
     }
-    if(strlen(msg_ptr->topic) == 37){
+    if(strlen(msg_ptr->topic) == 26){
     	pub_handler_OpMask(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
                 msg_ptr->payload_length);
     }
