@@ -1,81 +1,66 @@
-CC26xx Web Demo Readme
+ALSTOM MQTT IoT ACTUADOR
 ======================
 OBJETIVOS
 ----------
-El objetivo es obtener conectividad con el MQTT Broker de ALSTOM, eliminando  
-toda funcionalidad de HTTP Server. Además se persigue añadir un modo de bajo  
-consumo, gracias al uso de QoS en nivel 1 o 2. 
+El objetivo es obtener conectividad con el MQTT Broker de ALSTOM, eliminando  toda funcionalidad superficial para conseguir el mejor rendimiento posible.  Además se persigue añadir un modo de bajo consumo, gracias al uso de QoS en nivel 1 (en principio) y modos de lpm para CC2650 disponibles junto a Contiki. Por último, se pretende configurar la encriptación AES-128 como medida básica de seguridad entre los nodos de la red y el gateway (Weptech saker).  
+En este caso concreto la funcionalidad principal del Sensortag es la de funcionar como actuador, encendiendo su led ante determinadas publicaciones en el broker. También se ha mantenido una publiación con un intervalo muy grande de tiempo que envía al broker los datos del Sensortag y el nivel de su batería. Esto es de gran utilidad para controlar la sustitución de las baterías y a la vez poder controlar el tiempo de vida de las mismas.
 
-This demo project combines a number of web-based applications aiming to
-demonstrate the CC26xx capability. The applications are:
+Publicación
+-----------
+Este firmware se ha desarrollado a partir del ejemplo CC26xx Web Demo disponible en el repositorio de Contiki. En este ejemplo se obtienen solo los datos del sensor de batería (nivel de batería y temperatura) y se publican en formato JSON en el siguiente topic:  
+`sala/Sensortag/status/fmt/json`  
+Estas publicaciones se realizan de forma automática en cada cierto intervalo de tiempo, fijado por la constante ALSTOM_MQTT_IOT_DEFAULT_PUBLISH_INTERVAL. Dado que la publicación de estos datos no es la función principal de esta aplicación, este intervalo será alto (del orden de horas).  
+ 
+Subscripción  
+-----------
+ Cada Sensoratag se subscribe a dos topics, uno destinado a operación y el otro destiando a configuración.
+ ### Operación  
+ El topics de operación sigue el siguiente esquema:  
+ `sala/operación/leds`  
+ Las longitudes de cada palabra que forma el topic están regladas siendo en cada caso:  
+   
+ * sala -> 3 caracteres. Ej: A01  
+ * operación -> 5 caracteres Ej: PIN01  
+ * leds -> 4 caracteres. Es fijo y no modificable.  
+   
+El total de caracteres de este topic sería *3+1+5+1+4=14* (contando los slashes). Por ejemplo: `A01/PIN01/leds`.  
+El parámetro de sala tiene que ser fijado antes de compilar el código, mediante la constante ALSTOM_MQTT_IOT_DEFAULT_SALA. Sin embargo, el parámetro operación puede ser modificado mediante la constante ALSTOM_MQTT_IOT_DEFAULT_TIPO_OP (antes de compilar) o mediante el topic de configuración como se explicará a continuación.  
+El uso de este topic es muy sencillo, solo es necesario enviar como payload un caracter binario (0 o 1). 1 para encender el led y 0 para apagarlo. También puede ser apagado el led de forma "local" pulsando el botón del Sensortag ms cercano al led.
 
-* An MQTT client
+Configuración
+-------------
+El topic de configuración permite cambiar la subscripción del topic de operación para cada Sensortag. Es una funcionalidad interesante porque ofrece la posibilidad de modificar las subscripciones sin necesidad de reflashear el dispositivo. El topic de configuración sigue el siguiente esquema:  
+`sala/client-id/Conf/Número`  
+Al igual que para operación, las longitudes de cada parámetro están regladas:  
 
-IBM Quickstart / MQTT Client
-----------------------------
-The MQTT client can be used to:
+ * sala --> 3 caracteres. Ej: A01  
+ * client_id --> 14 caracteres. Sigue un esquema prefijado: `d:00124bABCDEFG` siendo fijos los caracteres d:00124b y variables ABCDEFG.Los carcteres fijos correponden a los 6 primeros dígitos hexadecimales de la dirección IEEE configurada en contiki-conf.h (dentro de la carpeta de la plataforma  srf06-cc26xx) mediante la constante IEEE_ADDR_CONF_ADDRESS. Los caracteres variables corresponden a los 6 últimos dígitos de la dirección MAC del dispositivo (puede ser consultada en el programa Uniflash).  
+* Conf --> 4 caracteres. Es fijo y no modificable.  
+* Número --> Un único dígito. Señala la operación a modificar. Un mismo Sensortag puede estar subscrito a diferentes topics de actuación y todos ellos son configurables independientemente.  
+  
+El total de caracteres de este topic sería 3+1+14+1+4+1+1 (contando slashes) = 25. Por ejemplo:  
+`A01/d:00124b30BCE8/Conf/1`  
+Al igual que con el topics de operación el topic sala debe ser configurado antes de compilar el código. Este parámetro es compartido entre ambos topics (no tendría sentido de otra forma). Client-id viene fijado por el propio dispositivo y no es modificable, es un identificador único de cada Sensortag, y es lo que permite configurar cada uno de forma individual.
 
-* Publish sensor readings to an MQTT broker.
-* Subscribe to a topic and as a result receive commands from an MQTT broker
+ 
 
-The device will try to connect to IBM's quickstart over NAT64, so you will
-need a NAT64 gateway in your network to make this work. A guide on how to
-setup NAT64 is out of scope here. If this is not an option for you, you can
+MQTT Client & Mosquitto Broker
+------------------------------
+The device will try to connect to the broker over NAT64, so you will
+need a NAT64 gateway in your network to make this work. If this is not an option for you, you can
 configure the device to publish to a local MQTT broker over end-to-end IPv6.
 See below on how to change the destination broker's address.
-
-By default the device will publish readings to IBM's quickstart service. The
-publish messages include sensor readings but also some other information such
-as device uptime in seconds and a message sequence number. Click the "IBM
-Quickstart" link in the web page to go directly to your device's page
-on Quickstart. After a few seconds, you will see something like this:
-
-![A SensorTag on IBM Quickstart](img/quickstart-sensortag.png)
-
-Sensor readings are only published if they have changed since the previous
-reading (BatMon is an exception and always gets published). Additionally, you
-can turn on/off individual readings from the config.html web page, as per the
-figure below.
-
-![Sensor Readings Configuration](img/sensor-readings-config.png)
-
-Some of the MQTT client functionality can be configured even further:
-
-* You can change the broker IP and port. This is useful if you want to use your
-  own MQTT broker instead of IBM's quickstart. The example has been tested
-  successfully with [mosquitto](http://mosquitto.org/)
-* You can change the publish interval. Recommended values are 10secs or higher.
-  You will not be allowed to set this to anything less than 5 seconds.
-* If you want to use IBM's cloud service with a registered device, change
-  'Org ID' and provide an 'Auth Token', which acts as a 'password', but bear in
-  mind that it gets transported in clear text, both over the web configuration
-  page as well as inside MQTT messages.
-* The remaining configuration options are related to the content of MQTT
-  messages and in general you won't have to modify them.
 
 For the SensorTag, changes to the MQTT configuration get saved in external
 flash and persist across device restarts. The same does not hold true for
 Srf+EM builds.
 
-You can also subscribe to topics and receive commands, but this will only
-work if you use "Org ID" != 'quickstart'. Thus, if you provide a different
-Org ID (do not forget the auth token!), the device will subscribe to:
-
-`iot-2/cmd/+/fmt/json`
-
-You can then use this to toggle LEDs or to turn the buzzer on and off.
-The buzzer is only available on the SensorTag. To do this, you can for example
-use mosquitto client to publish to `iot-2/cmd/leds/fmt/json`. So, to turn
-the buzzer on, you would do this:
+You can then use this to toggle LEDs. In order to public data using Mosquitto Broker, the terminal commands needed are the following:
 
 `mosquitto_pub -h <broker IP> -m "1" -t sala/tipo_op/leds`  
-`mosquitto_pub -h <broker IP> -m "1" -t sala/client_ID/Op_Mask`
+`mosquitto_pub -h <broker IP> -m "PIN02" -t sala/client_ID/Op_Mask`
 
-Where `broker IP` should be replaced with the IP address of your mosquitto
-broker (the one where you device has subscribed). Replace `-m "1'` with `-m "0"`
-to turn the buzzer back off. Replace `buzz` with `leds` in the topic to change
-the state of the LED.
-
+The message (-m) can change depending waht the user want to send.
 Bear in mind that, even though the topic suggests that messages are of json
 format, they are in fact not. This was done in order to avoid linking a json
 parser into the firmware.

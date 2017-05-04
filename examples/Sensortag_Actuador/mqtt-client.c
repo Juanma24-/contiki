@@ -117,7 +117,6 @@ static uint8_t state;
 #define BUFFER_SIZE 64
 static char client_id[BUFFER_SIZE];
 static char pub_topic[BUFFER_SIZE];
-static char sub_topic_Act[BUFFER_SIZE];
 static char sub_topic_Conf[BUFFER_SIZE];
 /*---------------------------------------------------------------------------*/
 /*
@@ -165,16 +164,16 @@ pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
   con los esperados ya que siempre la longitud es fija*/
   /* If we don't like the length, ignore */
-  if((chunk_len != 1)||(topic_len!=14)) {
-    	printf("Incorrect topic or chunk len. Ignored\n");
+  if(topic_len!=27) {
+    	printf("Incorrect topic. Ignored\n");
     	return;
   }
 
   /* Si el topic no coincide con la operacion asignada al Sensortag
   se ignora. Es muy importante ya que en caso contrario se activaría en todas
   las operaciones*/ 
-  if(strncmp(&topic[4], conf->tipo_op, 5) == 0) {				//Si las cadenas no son iguales
-    printf("Corresponde con el topic %s\n", conf->tipo_op);
+  if(strncmp(&topic[4], client_id, 14) == 0) {				//Si las cadenas no son iguales
+    printf("Cliente Afectado: %s\n", client_id);
   }   //AÑADIR TANTOS ELSEIF COMO TOPICS HAYA
   else{
     printf("Incorrect format\n");
@@ -182,53 +181,15 @@ pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   }
   /*Comprueba que el topic termina en leds, es una medida evitable, pero importante si 
   se introducen más topics por operación */
-  if(strncmp(&topic[topic_len - 4], "leds", 4) == 0) {
-    if(chunk[0] == '1') {
-      leds_on(LEDS_RED);
-    } else if(chunk[0] == '0') {
-      leds_off(LEDS_RED);
-    }
-    return;
-  }
-}
-/*---------------------------------------------------------------------------*/
-static void
-pub_handler_Conf(const char *topic, uint16_t topic_len, const uint8_t *chunk,
-            uint16_t chunk_len)
-{
-  int i;
-  DBG("Pub Handler: topic='%s' (len=%u), chunk_len=%u\n", topic, topic_len,chunk_len);
-
-    /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
-    con los esperados
-    If we don't like the length, ignore*/ 
-  if((chunk_len != 5)||(topic_len!=25)) {
-    	printf("Incorrect topic or chunk len. Ignored\n");
-    	return;
-  }
-
-  /* Se comprueba si el mensaje iba para este Sensortag comprobando que coinciden los client_ID*/ 
-  if(strncmp(&topic[4], client_id, 8) != 0) {				//Si las cadenas no son iguales
-    printf("Incorrect format\n");
-    return;
-  }
-  /*SEGURIDAD:se comprueba que el topic termina en Conf. Permite añadir topics en el mismo nivel*/
-  if(strncmp(&topic[topic_len - 6],"Conf",4) == 0){
-    if(strncmp(&topic[topic_len - 1],"1",1) == 0){
-  	   for(i=0;i<chunk_len;i++){
-  		    conf->tipo_op[i] = chunk[i];
-  	   }
-  	   state = MQTT_CLIENT_STATE_NEWCONFIG;
-       mqtt_disconnect(&conn);
-  	   return;
-    }
-    else{
+  if(strncmp(&topic[topic_len - 9], "Intervalo", 9) == 0) {
+      conf->pub_interval = chunk;
+      state = MQTT_CLIENT_STATE_NEWCONFIG;
+      mqtt_disconnect(&conn);
       return;
-    }
+  }else{
+      return;
   }
 }
-/*---------------------------------------------------------------------------*/
-
 /*---------------------------------------------------------------------------*/
 /*Es el handler que se ejecuta con las interrupciones de conexión del cliente (mqtt_register)*/
 static void
@@ -268,12 +229,8 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
           "size is %i bytes. Content:\n\n",
           msg_ptr->topic, msg_ptr->payload_length);
     }
-    if(strlen(msg_ptr->topic) == 14){
+    if(strlen(msg_ptr->topic) == 27){
     	pub_handler_Act(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
-                msg_ptr->payload_length);
-    }
-    if(strlen(msg_ptr->topic) == 25){
-    	pub_handler_Conf(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
                 msg_ptr->payload_length);
     }
     break;
@@ -319,17 +276,11 @@ construct_pub_topic(void)
 static int
 construct_sub_topic(void)
 {
-  int len = snprintf(sub_topic_Act, BUFFER_SIZE, "%s/%s/leds",conf->sala,conf->tipo_op);
-  DBG("Creado topic: %s/%s/leds\n",conf->sala,conf->tipo_op);
+  int len = snprintf(sub_topic_Act, BUFFER_SIZE, "%s/%s/Intervalo",conf->sala,client_id);
+  DBG("Creado topic:%s/%s/Intervalo",conf->sala,client_id);
   /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
   if(len < 0 || len >= BUFFER_SIZE) {
     printf("Sub Topic: %d, Buffer %d\n", len, BUFFER_SIZE);
-    return 0;
-  }
-  int len1 = snprintf(sub_topic_Conf,BUFFER_SIZE,"%s/%s/Conf/%s",conf->sala,client_id,conf->cmd_type);
-  DBG("Creado topic: %s/%s/Conf/%s\n",conf->sala,client_id,conf->cmd_type);
-  if(len1 < 0 || len1 >= BUFFER_SIZE) {
-    printf("Sub Topic: %d, Buffer %d\n", len1, BUFFER_SIZE);
     return 0;
   }
   return 1;
@@ -435,14 +386,6 @@ subscribe()
       if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
         DBG("APP - Tried to subscribe but command queue was full!\n");
       }
-      break;
-    }
-    case 1:{
-      DBG("APP - Subscribing!\n");
-      status = mqtt_subscribe(&conn, NULL, sub_topic_Conf, MQTT_QOS_LEVEL_1);
-      if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
-        DBG("APP - Tried to subscribe but command queue was full!\n");
-      }   
       break;
     }
     default:
