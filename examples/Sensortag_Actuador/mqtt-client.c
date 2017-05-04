@@ -173,7 +173,7 @@ pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   /* Si el topic no coincide con la operacion asignada al Sensortag
   se ignora. Es muy importante ya que en caso contrario se activaría en todas
   las operaciones*/ 
-  if(strncmp(&topic[4], conf->tipo_op, 5) != 0) {				//Si las cadenas no son iguales
+  if(strncmp(&topic[4], conf->tipo_op, 5) == 0) {				//Si las cadenas no son iguales
     printf("Corresponde con el topic %s\n", conf->tipo_op);
   }   //AÑADIR TANTOS ELSEIF COMO TOPICS HAYA
   else{
