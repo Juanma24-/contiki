@@ -123,7 +123,7 @@ static uint8_t state;
 #define BUFFER_SIZE 64
 static char client_id[BUFFER_SIZE];
 static char pub_topic[BUFFER_SIZE];
-static char sub_topic_Act[BUFFER_SIZE];
+static char sub_topic_Act[4][BUFFER_SIZE];
 static char sub_topic_Conf[BUFFER_SIZE];
 /*---------------------------------------------------------------------------*/
 /*
@@ -196,14 +196,21 @@ pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   /* Si el topic no coincide con la operacion asignada al Sensortag
   se ignora. Es muy importante ya que en caso contrario se activaría en todas
   las operaciones*/ 
-  if(strncmp(&topic[4], conf->tipo_op, 5) == 0) {				//Si las cadenas no son iguales
-    printf("Corresponde con el topic %s\n", conf->tipo_op);
+  if(strncmp(&topic[4], conf->tipo_op[0], 5) == 0) {				//Si las cadenas no son iguales
+    printf("Corresponde con el topic %s\n", conf->tipo_op[0]);
   }   
   /*
   * En caso de que el dispositivo estuviera suscrito a más de una operación este
   * es el lugar dónde se deben colocar los elseif de comprobación, al igual que el
   * if anterior.
   */
+  else if(strncmp(&topic[4], conf->tipo_op[1], 5) == 0){
+    printf("Corresponde con el topic %s\n", conf->tipo_op[1]);
+  }else if(strncmp(&topic[4], conf->tipo_op[2], 5) == 0){
+    printf("Corresponde con el topic %s\n", conf->tipo_op[2]);
+  }else if(strncmp(&topic[4], conf->tipo_op[3], 5) == 0){
+    printf("Corresponde con el topic %s\n", conf->tipo_op[3]);
+  }
   else{
     printf("Incorrect format\n");
     return;
@@ -248,13 +255,34 @@ pub_handler_Conf(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   }
   /*SEGURIDAD:se comprueba que el topic termina en Conf. Permite añadir topics en el mismo nivel*/
   if(strncmp(&topic[topic_len - 6],"Conf",4) == 0){
-    if(strncmp(&topic[topic_len - 1],"1",1) == 0){
+    if(strncmp(&topic[topic_len - 1],"0",1) == 0){
   	   for(i=0;i<chunk_len;i++){
-  		    conf->tipo_op[i] = chunk[i];
+  		    conf->tipo_op[0][i] = chunk[i];
   	   }
   	   state = MQTT_CLIENT_STATE_NEWCONFIG;
        mqtt_disconnect(&conn);
   	   return;
+    }else if(strncmp(&topic[topic_len - 1],"1",1) == 0){
+       for(i=0;i<chunk_len;i++){
+          conf->tipo_op[1][i] = chunk[i];
+       }
+       state = MQTT_CLIENT_STATE_NEWCONFIG;
+       mqtt_disconnect(&conn);
+       return;
+    }else if(strncmp(&topic[topic_len - 1],"2",1) == 0){
+       for(i=0;i<chunk_len;i++){
+          conf->tipo_op[2][i] = chunk[i];
+       }
+       state = MQTT_CLIENT_STATE_NEWCONFIG;
+       mqtt_disconnect(&conn);
+       return;
+    }else if(strncmp(&topic[topic_len - 1],"3",1) == 0){
+       for(i=0;i<chunk_len;i++){
+          conf->tipo_op[3][i] = chunk[i];
+       }
+       state = MQTT_CLIENT_STATE_NEWCONFIG;
+       mqtt_disconnect(&conn);
+       return;
     }
     else{
       return;
@@ -371,18 +399,22 @@ static int
 construct_sub_topic(void)
 {
   /*Construción topics de Actuación*/
-  int len = snprintf(sub_topic_Act, BUFFER_SIZE, "%s/%s/leds",conf->sala,conf->tipo_op);
-  DBG("Creado topic: %s/%s/leds\n",conf->sala,conf->tipo_op);
-  /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
-  if(len < 0 || len >= BUFFER_SIZE) {
-    printf("Sub Topic: %d, Buffer %d\n", len, BUFFER_SIZE);
-    return 0;
+  int i;
+  int len[4];
+  for(i=0;i<4;i++){
+    len[i] = snprintf(sub_topic_Act[i], BUFFER_SIZE, "%s/%s/leds",conf->sala,conf->tipo_op[i]);
+    DBG("Creado topic: %s/%s/leds\n",conf->sala,conf->tipo_op[i]);
+    /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
+    if(len[i] < 0 || len[i] >= BUFFER_SIZE) {
+      printf("Sub Topic: %d, Buffer %d\n", len[i], BUFFER_SIZE);
+      return 0;
+    }
   }
   /*Construcción topics de configuración*/
-  int len1 = snprintf(sub_topic_Conf,BUFFER_SIZE,"%s/%s/Conf/%s",conf->sala,client_id,conf->cmd_type);
+  int lenc1 = snprintf(sub_topic_Conf,BUFFER_SIZE,"%s/%s/Conf/%s",conf->sala,client_id,conf->cmd_type);
   DBG("Creado topic: %s/%s/Conf/%s\n",conf->sala,client_id,conf->cmd_type);
-  if(len1 < 0 || len1 >= BUFFER_SIZE) {
-    printf("Sub Topic: %d, Buffer %d\n", len1, BUFFER_SIZE);
+  if(lenc1 < 0 || lenc1 >= BUFFER_SIZE) {
+    printf("Sub Topic: %d, Buffer %d\n", lenc1, BUFFER_SIZE);
     return 0;
   }
   return 1;
@@ -471,7 +503,10 @@ init_config()
   memcpy(conf->cmd_type, ALSTOM_MQTT_IOT_DEFAULT_SUBSCRIBE_CMD_TYPE, 1);
   memcpy(conf->user_id,ALSTOM_MQTT_IOT_DEFAULT_USERNAME_ID,24);
   memcpy(conf->auth_token, ALSTOM_MQTT_IOT_DEFAULT_AUTH_TOKEN, 20);
-  memcpy(conf->tipo_op,ALSTOM_MQTT_IOT_DEFAULT_TIPO_OP,5);
+  memcpy(conf->tipo_op[0],ALSTOM_MQTT_IOT_DEFAULT_TIPO_OP_0,5);
+  memcpy(conf->tipo_op[1],ALSTOM_MQTT_IOT_DEFAULT_TIPO_OP_1,5);
+  memcpy(conf->tipo_op[2],ALSTOM_MQTT_IOT_DEFAULT_TIPO_OP_2,5);
+  memcpy(conf->tipo_op[3],ALSTOM_MQTT_IOT_DEFAULT_TIPO_OP_3,5);
   memcpy(conf->sala,ALSTOM_MQTT_IOT_DEFAULT_SALA,3);
   conf->broker_port = ALSTOM_MQTT_IOT_DEFAULT_BROKER_PORT;
   conf->pub_interval = ALSTOM_MQTT_IOT_DEFAULT_PUBLISH_INTERVAL;
@@ -495,13 +530,37 @@ subscribe()
   switch (flag_sub_topic){
     case 0:{
       DBG("APP - Subscribing!\n");
-      status = mqtt_subscribe(&conn, NULL, sub_topic_Act, MQTT_QOS_LEVEL_1);
+      status = mqtt_subscribe(&conn, NULL, sub_topic_Act[flag_sub_topic], MQTT_QOS_LEVEL_1);
       if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
         DBG("APP - Tried to subscribe but command queue was full!\n");
       }
       break;
     }
     case 1:{
+      DBG("APP - Subscribing!\n");
+      status = mqtt_subscribe(&conn, NULL, sub_topic_Act[flag_sub_topic], MQTT_QOS_LEVEL_1);
+      if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
+        DBG("APP - Tried to subscribe but command queue was full!\n");
+      }
+      break;
+    }
+    case 2:{
+      DBG("APP - Subscribing!\n");
+      status = mqtt_subscribe(&conn, NULL, sub_topic_Act[flag_sub_topic], MQTT_QOS_LEVEL_1);
+      if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
+        DBG("APP - Tried to subscribe but command queue was full!\n");
+      }
+      break;
+    }
+    case 3:{
+      DBG("APP - Subscribing!\n");
+      status = mqtt_subscribe(&conn, NULL, sub_topic_Act[flag_sub_topic], MQTT_QOS_LEVEL_1);
+      if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
+        DBG("APP - Tried to subscribe but command queue was full!\n");
+      }
+      break;
+    }
+    case 4:{
       DBG("APP - Subscribing!\n");
       status = mqtt_subscribe(&conn, NULL, sub_topic_Conf, MQTT_QOS_LEVEL_1);
       if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
