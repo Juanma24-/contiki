@@ -54,15 +54,12 @@
 #include <strings.h>
 /*---------------------------------------------------------------------------*/
 /*
- * IBM server: messaging.quickstart.internetofthings.ibmcloud.com
- * (184.172.124.189) mapped in an NAT64 (prefix 64:ff9b::/96) IPv6 address
- * Note: If not able to connect; lookup the IP address again as it may change.
- *
- * If the node has a broker IP setting saved on flash, this value here will
- * get ignored
+ * Dirección IP del Broker. El Gateway utiliza NAT64 por lo que las direcciones
+ * IPv4 son mapeadas a direcciones IPv6. La conversion se puede realizar facilmente
+ * con alguna herramienta web como: https://www.ultratools.com/tools/ipv4toipv6
  */
-/*static const char *broker_ip = "0064:ff9b:0000:0000:0000:0000:b8ac:7cbd";*/
-/*static const char *broker_ip = "0000:0000:0000:0000:0000:ffff:b8ac:7cbd";*/
+/* Dorección IP local del Broker Mosquitto ubicado en Laptop */
+
 static const char *broker_ip = "0000:0000:0000:0000:0000:ffff:c0a8:012f";
 /*---------------------------------------------------------------------------*/
 /*
@@ -92,7 +89,7 @@ static const char *broker_ip = "0000:0000:0000:0000:0000:ffff:c0a8:012f";
 static struct timer connection_life;
 static uint8_t connect_attempt;
 /*---------------------------------------------------------------------------*/
-/* Various states */
+/* Estados del cliente MQTT utilizados por la maquina de estados */
 static uint8_t state;
 #define MQTT_CLIENT_STATE_INIT            0
 #define MQTT_CLIENT_STATE_REGISTERED      1
@@ -111,13 +108,20 @@ static uint8_t state;
  * Buffers for Client ID and Topic.
  * Make sure they are large enough to hold the entire respective string
  *
- * d:quickstart:status:EUI64 is 32 bytes long
- * iot-2/evt/status/fmt/json is 25 bytes
+ * En este caso se utilizarán un tipo de topic de subscripcion; Configuración.
+ * Será necesario para cambiar dinámicamente el intervalo de publicación del
+ * sensor.
+ *  CONFIGURACION
+ *              A01/d:00124bXXXXXX/Intervalo
+ *  PUBLICACION
+ *              A01/Sensortag/status/fmt/json
+ *
  * We also need space for the null termination
  */
 #define BUFFER_SIZE 64
 static char client_id[BUFFER_SIZE];
 static char pub_topic[BUFFER_SIZE];
+static char sub_topic_Conf[BUFFER_SIZE];
 /*---------------------------------------------------------------------------*/
 /*
  * The main MQTT buffers.
@@ -126,8 +130,6 @@ static char pub_topic[BUFFER_SIZE];
 #define APP_BUFFER_SIZE 512
 static struct mqtt_connection conn;
 static char app_buffer[APP_BUFFER_SIZE];
-/*---------------------------------------------------------------------------*/
-//#define QUICKSTART "quickstart"
 /*---------------------------------------------------------------------------*/
 static struct mqtt_message *msg_ptr = 0;
 static struct etimer publish_periodic_timer;
@@ -140,10 +142,18 @@ static uip_ip6addr_t def_route;
 /* Parent RSSI functionality */
 extern int def_rt_rssi;
 /*---------------------------------------------------------------------------*/
+/* 
+ * Lista con todos los valores de lecturas de los sensores. 
+*/
 const static alstom_mqtt_iot_sensor_reading_t *reading;
 /*---------------------------------------------------------------------------*/
 mqtt_client_config_t *conf;
 /*---------------------------------------------------------------------------*/
+/* 
+ * Bandera que indica el topic al que debe subscribirse el dispositivo. Es 
+ * incrementa por el evento de subscripción del cliente mqtt (mqtt_event) y 
+ * reiniciada cuando se ha de actualizar la configuración (update_conf).
+*/
 int flag_sub_topic = 0;
 /*---------------------------------------------------------------------------*/
 PROCESS(mqtt_client_process, "CC26XX MQTT Client");
@@ -154,15 +164,53 @@ publish_led_off(void *d)                                                        
   leds_off(ALSTOM_MQTT_IOT_STATUS_LED);
 }
 /*---------------------------------------------------------------------------*/
+/*
+* Handler de la subcripción a Configuracion. Cuando se active este handler
+* se comprueba que el cliente del topic coincide con el cliente del Sensortag.
+* Si es así se modifica el interavalo y se actualiza la configuración. 
+*/
+static void
+pub_handler_Conf(const char *topic, uint16_t topic_len, const uint8_t *chunk,
+            uint16_t chunk_len)
+{
+  DBG("Pub Handler: topic='%s' (len=%u), chunk_len=%u\n", topic, topic_len,chunk_len);
 
+    /* 
+    * Se comprueba la longitud del topic para comprobar si coincide
+    * con el esperado.
+    * If we don't like the length, ignore*/ 
+  if((topic_len!=28)) {
+    	printf("Incorrect topic or chunk len. Ignored\n");
+    	return;
+  }
 
+  /* Se comprueba si el mensaje iba para este Sensortag comprobando que coinciden los client_ID*/ 
+  if(strncmp(&topic[4], client_id, 14) != 0) {				//Si las cadenas no son iguales
+    printf("Incorrect format\n");
+    return;
+  }
+  /*SEGURIDAD:se comprueba que el topic termina en Intervalo.*/
+  if(strncmp(&topic[topic_len - 9],"Intervalo",9) == 0){
+    conf->pub_interval = chunk;
+  	state = MQTT_CLIENT_STATE_NEWCONFIG;
+    mqtt_disconnect(&conn);
+  	return;
+  }     
+  else{
+    return;
+  }
+}
 /*---------------------------------------------------------------------------*/
-/*Es el handler que se ejecuta con las interrupciones de conexión del cliente (mqtt_register)*/
+/*
+* Es el handler que se ejecuta con las interrupciones de conexión del cliente (mqtt_register).
+* Gestiona el correcto funiconamiento del cliente y permite introducir acciones ante
+* ciertos eventos como la subscripción a un topic, publicación o desconexión.
+*/
 static void
 mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
 {
   switch(event) {
-  /*conexion cliente/Broker realizada*/
+  /*Conexion cliente/Broker realizada*/
   case MQTT_EVENT_CONNECTED: {
     DBG("APP - Application has a MQTT connection\n");
     timer_set(&connection_life, CONNECTION_STABLE_TIME);
@@ -195,6 +243,10 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
           "size is %i bytes. Content:\n\n",
           msg_ptr->topic, msg_ptr->payload_length);
     }
+    if(strlen(msg_ptr->topic) == 28){
+    	pub_handler_Conf(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
+                msg_ptr->payload_length);
+    }
     break;
   }
   /*Subscripcion a topic realizada con éxito*/
@@ -220,6 +272,11 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
   }
 }
 /*---------------------------------------------------------------------------*/
+/*
+* Construye el topic de publicación a partir de los datos del dispostivo
+* y el formato impuesto. Este topic debe estar reservado al comienzo del
+ código en este archivo.
+*/
 static int
 construct_pub_topic(void)
 {
@@ -235,8 +292,28 @@ construct_pub_topic(void)
   return 1;
 }
 /*---------------------------------------------------------------------------*/
-/*CONSTRUYE EL CLIENT_ID A PARTIR DE LA DIRECCION MAC (DEVICE_ID) SEGÚN EL FORMATO
-d:<Device_ID>, SIMPLIFICADO DE d:<ORG_ID>:<Type_ID>:<Device_ID>*/
+/*
+* Construye los topics de subscripción a partir de los datos del dispostivo
+* y el formato impuesto. Es necesario que estos topics
+* hayan sido reservados al comienzo del código en este archivo.
+*/
+static int
+construct_sub_topic(void)
+{
+  /*Construcción topics de configuración*/
+  int len1 = snprintf(sub_topic_Conf,BUFFER_SIZE,"%s/%s/Intervalo",conf->sala,client_id);
+  DBG("Creado topic: %s/%s/Intervalo\n",conf->sala,client_id);
+  if(len1 < 0 || len1 >= BUFFER_SIZE) {
+    printf("Sub Topic: %d, Buffer %d\n", len1, BUFFER_SIZE);
+    return 0;
+  }
+  return 1;
+}
+/*---------------------------------------------------------------------------*/
+/*
+* CONSTRUYE EL CLIENT_ID A PARTIR DE LA DIRECCION MAC (DEVICE_ID) SEGÚN EL FORMATO
+* d:<Device_ID>, SIMPLIFICADO DE d:<ORG_ID>:<Type_ID>:<Device_ID>
+*/
 static int
 construct_client_id(void)                                                                 
 {
@@ -254,15 +331,24 @@ construct_client_id(void)
   return 1;
 }
 /*---------------------------------------------------------------------------*/
-/* ACTUALIZA LA INFORMACION SOBRE LOS TOPIC SUBSCRITOS Y DE PUBLICACIÓN,
-ESTA FUNCIÓN ES ACTIVADA DESDE LA MÁQUINA DE ESTADOS, NO SE DEBE REALIZAR 
-UNA LLAMADA DIRECTA*/
+/* 
+* ACTUALIZA LA INFORMACION SOBRE LOS TOPIC SUBSCRITOS Y DE PUBLICACIÓN,
+* ESTA FUNCIÓN ES ACTIVADA DESDE LA MÁQUINA DE ESTADOS, NO SE DEBE REALIZAR 
+* UNA LLAMADA DIRECTA
+*/
 static void
 update_config(void)
 {
   /*Construcción del Client_ID, en caso de que la linkaddr haya sido modificada*/
   if(construct_client_id() == 0) {
     /* Fatal error. Client ID larger than the buffer */
+    state = MQTT_CLIENT_STATE_CONFIG_ERROR;
+    return;
+  }
+  /*Modificado de los topics de subscripcion, estos pueden ser modificados por
+  mensajes recibidos de ellos mismos, e.g Código de operación para topic*/
+  if(construct_sub_topic() == 0) {
+    /* Fatal error. Topic larger than the buffer */
     state = MQTT_CLIENT_STATE_CONFIG_ERROR;
     return;
   }
@@ -273,7 +359,7 @@ update_config(void)
     return;
   }
 
-  /* Reset the counter */
+  /* Reset the counter and the subscription flag */
   seq_nr_value = 0;
   flag_sub_topic = 0;
   /*Resetea el cliente, imponiendo un estado de inicio de nuevo*/
@@ -292,8 +378,10 @@ update_config(void)
   return;
 }
 /*---------------------------------------------------------------------------*/
-/*INICIAR CONFIGURACIÓN, COPIA TODAS LAS CONSTANTES EN LA ESTRUCUTURA CONF
-LAS LONGITUDES TIENEN QUE SER AJUSTADAS SI SE MODIFICA ALGUNO DE LOS PARÁMETROS*/
+/*
+* INICIA CONFIGURACIÓN, COPIA TODAS LAS CONSTANTES EN LA ESTRUCUTURA CONF
+* LAS LONGITUDES TIENEN QUE SER AJUSTADAS SI SE MODIFICA ALGUNO DE LOS PARÁMETROS.
+*/
 static int
 init_config()
 {
@@ -310,8 +398,39 @@ init_config()
 
   return 1;
 }
+
 /*---------------------------------------------------------------------------*/
-//PUBLICA AL BROKER
+/*
+* Realiza las subcripciones a el topic de configuracion. Las
+* subscripciones deben ser llevadas a cabo una tras la finalización de la 
+* anterior por lo que la bandera permite la subscripción en el momento
+* adecuado evitando el llenado de la cola (la no subscripcion).
+* IMPORTANTE: NIVEL DE QoS == 1 
+*/
+static void
+subscribe()
+{
+  /* Publish MQTT topic in IBM quickstart format */
+  mqtt_status_t status;
+  switch (flag_sub_topic){
+    case 0:{
+      DBG("APP - Subscribing!\n");
+      status = mqtt_subscribe(&conn, NULL, sub_topic_Conf, MQTT_QOS_LEVEL_1);
+      if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
+        DBG("APP - Tried to subscribe but command queue was full!\n");
+      }   
+      break;
+    }
+    default:
+      break;
+  }
+}
+/*---------------------------------------------------------------------------*/
+/*
+* Publica en el broker según el topic de publicación. En este caso solo publica los datos
+* refrentes al dispositivo y los datos de temperatura y voltaje de la batería. Unicos
+* valores de la lista reading.
+*/
 static void
 publish(void)
 {
@@ -386,7 +505,9 @@ publish(void)
   DBG("APP - Publish!\n");
 }
 /*---------------------------------------------------------------------------*/
-/*SE CONECTA AL BROKER, NECESARIO LA DIRECCIÓN IP Y EL PUERTO*/
+/*
+* SE CONECTA AL BROKER, NECESARIO LA DIRECCIÓN IP Y EL PUERTO
+*/
 static void
 connect_to_broker(void)                                                                   
 {
@@ -397,11 +518,17 @@ connect_to_broker(void)
   state = MQTT_CLIENT_STATE_CONNECTING;
 }
 /*---------------------------------------------------------------------------*/
+/*
+* Maquina de estados que gestiona las conexiones, subscripciones y pubilcaciones del
+* cliente. Es disparada mediante el proceso pricncipal.
+*/
 static void
 state_machine(void)
 {
   switch(state) {
-  /*Inicio del cliente MQTT, registra la conexión (cliente) y fija el nombre de usuario y contraseña */  
+  /*
+  * Inicio del cliente MQTT, registra la conexión (cliente) y fija el nombre de usuario y contraseña 
+  */  
   case MQTT_CLIENT_STATE_INIT:
     /* If we have just been configured register MQTT connection */
     mqtt_register(&conn, &mqtt_client_process, client_id, mqtt_event,
@@ -430,7 +557,9 @@ state_machine(void)
     state = MQTT_CLIENT_STATE_REGISTERED;
     DBG("Init\n");
     /* Continue */
-  /*Conexión al Broker tras registro del cliente, el paso a CONNECTING lo hace la función connect_to_broker*/
+  /*
+  * Conexión al Broker tras registro del cliente, el paso a CONNECTING lo hace la función connect_to_broker
+  */
   case MQTT_CLIENT_STATE_REGISTERED:
     if(uip_ds6_get_global(ADDR_PREFERRED) != NULL) {
       /* Registered and with a public IP. Connect */
@@ -447,11 +576,14 @@ state_machine(void)
     /* Not connected yet. Wait */
     DBG("Connecting (%u)\n", connect_attempt);
     break;
-  /*Cliente conectado a Broker con éxito, es disparado por mqtt_event*/
+  /*
+  *Cliente conectado a Broker con éxito, es disparado por mqtt_event
+  */
   case MQTT_CLIENT_STATE_CONNECTED:
-    /*MUY IMPORTANTE: No hay break por lo qeu aunque el estado es CONNECTED,
-    se ejecuta código de PUBLISHING*/
-    state=MQTT_CLIENT_STATE_PUBLISHING;
+    /*
+    * MUY IMPORTANTE: No hay break por lo que aunque el estado es CONNECTED,
+    * se ejecuta código de PUBLISHING
+    */
     /* Continue */
   case MQTT_CLIENT_STATE_PUBLISHING:
     /* If the timer expired, the connection is stable. */
@@ -471,6 +603,12 @@ state_machine(void)
         * a diferentes topics,para acelerar el proceso se fuerza la 
         * ejecucion recursiva de state_machine.
         */
+        if(flag_sub_topic<1){
+          subscribe();
+        }else{
+          state = MQTT_CLIENT_STATE_PUBLISHING;
+        }    
+        process_poll(&mqtt_client_process);
       } else {
         leds_on(ALSTOM_MQTT_IOT_STATUS_LED);                                  //Enciende LED verde
         ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL);

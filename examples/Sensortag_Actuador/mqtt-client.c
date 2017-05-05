@@ -54,13 +54,11 @@
 #include <strings.h>
 /*---------------------------------------------------------------------------*/
 /*
- * IBM server: messaging.quickstart.internetofthings.ibmcloud.com
- * (184.172.124.189) mapped in an NAT64 (prefix 64:ff9b::/96) IPv6 address
- * Note: If not able to connect; lookup the IP address again as it may change.
- *
- * If the node has a broker IP setting saved on flash, this value here will
- * get ignored
+ * Dirección IP del Broker. El Gateway utiliza NAT64 por lo que las direcciones
+ * IPv4 son mapeadas a direcciones IPv6. La conversion se puede realizar facilmente
+ * con alguna herramienta web como: https://www.ultratools.com/tools/ipv4toipv6
  */
+/* Dorección IP local del Broker Mosquitto ubicado en Laptop */
 
 static const char *broker_ip = "0000:0000:0000:0000:0000:ffff:c0a8:012f";
 /*---------------------------------------------------------------------------*/
@@ -91,7 +89,7 @@ static const char *broker_ip = "0000:0000:0000:0000:0000:ffff:c0a8:012f";
 static struct timer connection_life;
 static uint8_t connect_attempt;
 /*---------------------------------------------------------------------------*/
-/* Various states */
+/* Estados del cliente MQTT utilizados por la maquina de estados */
 static uint8_t state;
 #define MQTT_CLIENT_STATE_INIT            0
 #define MQTT_CLIENT_STATE_REGISTERED      1
@@ -110,13 +108,22 @@ static uint8_t state;
  * Buffers for Client ID and Topic.
  * Make sure they are large enough to hold the entire respective string
  *
- * d:quickstart:status:EUI64 is 32 bytes long
- * iot-2/evt/status/fmt/json is 25 bytes
+ * En este caso se utilizarán dos tipos de topics; Actuación y Configuración.
+ * Cada topic de actuación lleva ligado uno de configuración y puede haber
+ * tantos como se precise.
+ *  ACTUACION:
+ *              A01/PIN01/leds
+ *  CONFIGURACION
+ *              A01/d:00124bXXXXXX/Conf/1
+ *  PUBLICACION
+ *              A01/Sensortag/status/fmt/json
+ *
  * We also need space for the null termination
  */
 #define BUFFER_SIZE 64
 static char client_id[BUFFER_SIZE];
 static char pub_topic[BUFFER_SIZE];
+static char sub_topic_Act[BUFFER_SIZE];
 static char sub_topic_Conf[BUFFER_SIZE];
 /*---------------------------------------------------------------------------*/
 /*
@@ -140,10 +147,19 @@ static uip_ip6addr_t def_route;
 /* Parent RSSI functionality */
 extern int def_rt_rssi;
 /*---------------------------------------------------------------------------*/
+/* 
+ * Lista con todos los valores de lecturas de los sensores. Para este caso solo
+ * se tiene el valor de temperatura y voltaje de la batería.
+*/
 const static alstom_mqtt_iot_sensor_reading_t *reading;
 /*---------------------------------------------------------------------------*/
 mqtt_client_config_t *conf;
 /*---------------------------------------------------------------------------*/
+/* 
+ * Bandera que indica el topic al que debe subscribirse el dispositivo. Es 
+ * incrementa por el evento de subscripción del cliente mqtt (mqtt_event) y 
+ * reiniciada cuando se ha de actualizar la configuración (update_conf).
+*/
 int flag_sub_topic = 0;
 /*---------------------------------------------------------------------------*/
 PROCESS(mqtt_client_process, "CC26XX MQTT Client");
@@ -154,7 +170,15 @@ publish_led_off(void *d)                                                        
   leds_off(ALSTOM_MQTT_IOT_STATUS_LED);
 }
 /*---------------------------------------------------------------------------*/
-//Revisar Numeros
+/*
+* Handler de la subcripción a Actuaciónes. Será disparado cuando se envíe un mensaje
+* binario (1/0) a un topic de operación al que el dispositivo esté ligado. En este
+* handler se comprueba que el topic es el correcto y en caso afirmativo se enciende
+* el LED rojo. 
+* Este handler gestionará todas las actuaciones por muchas operaciones a las que se 
+* ligue el dispositivo. Es muy importante tener en cuenta las longitudes de los topics
+* ya que si se falla en ese punto el dipositivo no responderá a las ordenes externas.
+*/
 static void
 pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
             uint16_t chunk_len)
@@ -164,39 +188,90 @@ pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
   con los esperados ya que siempre la longitud es fija*/
   /* If we don't like the length, ignore */
-  if(topic_len!=27) {
-    	printf("Incorrect topic. Ignored\n");
+  if((chunk_len != 1)||(topic_len!=14)) {
+    	printf("Incorrect topic or chunk len. Ignored\n");
     	return;
   }
 
   /* Si el topic no coincide con la operacion asignada al Sensortag
   se ignora. Es muy importante ya que en caso contrario se activaría en todas
   las operaciones*/ 
-  if(strncmp(&topic[4], client_id, 14) == 0) {				//Si las cadenas no son iguales
-    printf("Cliente Afectado: %s\n", client_id);
-  }   //AÑADIR TANTOS ELSEIF COMO TOPICS HAYA
+  if(strncmp(&topic[4], conf->tipo_op, 5) == 0) {				//Si las cadenas no son iguales
+    printf("Corresponde con el topic %s\n", conf->tipo_op);
+  }   
+  /*
+  * En caso de que el dispositivo estuviera suscrito a más de una operación este
+  * es el lugar dónde se deben colocar los elseif de comprobación, al igual que el
+  * if anterior.
+  */
   else{
     printf("Incorrect format\n");
     return;
   }
   /*Comprueba que el topic termina en leds, es una medida evitable, pero importante si 
   se introducen más topics por operación */
-  if(strncmp(&topic[topic_len - 9], "Intervalo", 9) == 0) {
-      conf->pub_interval = chunk;
-      state = MQTT_CLIENT_STATE_NEWCONFIG;
-      mqtt_disconnect(&conn);
-      return;
-  }else{
-      return;
+  if(strncmp(&topic[topic_len - 4], "leds", 4) == 0) {
+    if(chunk[0] == '1') {
+      leds_on(LEDS_RED);
+    } else if(chunk[0] == '0') {
+      leds_off(LEDS_RED);
+    }
+    return;
   }
 }
 /*---------------------------------------------------------------------------*/
-/*Es el handler que se ejecuta con las interrupciones de conexión del cliente (mqtt_register)*/
+/*
+* Handler de la subcripción a Configuracion. Habra tantas subscripciones a configuraciones
+* como a actuaciones, ya que cada actuación debe poder modificada dinámicamente. Cada topic
+* de configuracion lleva asigando un número por lo que es importante tner un registro externo 
+* de las configuraciones en cada lugar para poder cambiar una antiga por otra nueva sin fallos. 
+*/
+static void
+pub_handler_Conf(const char *topic, uint16_t topic_len, const uint8_t *chunk,
+            uint16_t chunk_len)
+{
+  int i;
+  DBG("Pub Handler: topic='%s' (len=%u), chunk_len=%u\n", topic, topic_len,chunk_len);
+
+    /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
+    con los esperados
+    If we don't like the length, ignore*/ 
+  if((chunk_len != 5)||(topic_len!=25)) {
+    	printf("Incorrect topic or chunk len. Ignored\n");
+    	return;
+  }
+
+  /* Se comprueba si el mensaje iba para este Sensortag comprobando que coinciden los client_ID*/ 
+  if(strncmp(&topic[4], client_id, 8) != 0) {				//Si las cadenas no son iguales
+    printf("Incorrect format\n");
+    return;
+  }
+  /*SEGURIDAD:se comprueba que el topic termina en Conf. Permite añadir topics en el mismo nivel*/
+  if(strncmp(&topic[topic_len - 6],"Conf",4) == 0){
+    if(strncmp(&topic[topic_len - 1],"1",1) == 0){
+  	   for(i=0;i<chunk_len;i++){
+  		    conf->tipo_op[i] = chunk[i];
+  	   }
+  	   state = MQTT_CLIENT_STATE_NEWCONFIG;
+       mqtt_disconnect(&conn);
+  	   return;
+    }
+    else{
+      return;
+    }
+  }
+}
+/*---------------------------------------------------------------------------*/
+/*
+* Es el handler que se ejecuta con las interrupciones de conexión del cliente (mqtt_register).
+* Gestiona el correcto funiconamiento del cliente y permite introducir acciones ante
+* ciertos eventos como la subscripción a un topic, publicación o desconexión.
+*/
 static void
 mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
 {
   switch(event) {
-  /*conexion cliente/Broker realizada*/
+  /*Conexion cliente/Broker realizada*/
   case MQTT_EVENT_CONNECTED: {
     DBG("APP - Application has a MQTT connection\n");
     timer_set(&connection_life, CONNECTION_STABLE_TIME);
@@ -229,8 +304,12 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
           "size is %i bytes. Content:\n\n",
           msg_ptr->topic, msg_ptr->payload_length);
     }
-    if(strlen(msg_ptr->topic) == 27){
+    if(strlen(msg_ptr->topic) == 14){
     	pub_handler_Act(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
+                msg_ptr->payload_length);
+    }
+    if(strlen(msg_ptr->topic) == 25){
+    	pub_handler_Conf(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
                 msg_ptr->payload_length);
     }
     break;
@@ -258,6 +337,11 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
   }
 }
 /*---------------------------------------------------------------------------*/
+/*
+* Construye el topic de publicación a partir de los datos del dispostivo
+* y el formato impuesto. Este topic debe estar reservado al comienzo del
+ código en este archivo.
+*/
 static int
 construct_pub_topic(void)
 {
@@ -273,21 +357,41 @@ construct_pub_topic(void)
   return 1;
 }
 /*---------------------------------------------------------------------------*/
+/*
+* Construye los topics de subscripción a partir de los datos del dispostivo
+* y el formato impuesto. Crea varios de ellos. Es necesario que estos topics
+* hayan sido reservados al comienzo del código en este archivo. 
+* Los topics de actuación son creados explicitamente los necesarios. Podría
+* haberse utilizado el comando "+" pero en ese caso actuarí ante cada orden que 
+* fuera a cada Sensortag, con el consecuente gasto de recursos y batería.
+* En cambio los topics de configuracion son reservados con el comando "+" ya que 
+* ya viene filtrados por el Id del cliente. 
+*/
 static int
 construct_sub_topic(void)
 {
-  int len = snprintf(sub_topic_Act, BUFFER_SIZE, "%s/%s/Intervalo",conf->sala,client_id);
-  DBG("Creado topic:%s/%s/Intervalo",conf->sala,client_id);
+  /*Construción topics de Actuación*/
+  int len = snprintf(sub_topic_Act, BUFFER_SIZE, "%s/%s/leds",conf->sala,conf->tipo_op);
+  DBG("Creado topic: %s/%s/leds\n",conf->sala,conf->tipo_op);
   /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
   if(len < 0 || len >= BUFFER_SIZE) {
     printf("Sub Topic: %d, Buffer %d\n", len, BUFFER_SIZE);
     return 0;
   }
+  /*Construcción topics de configuración*/
+  int len1 = snprintf(sub_topic_Conf,BUFFER_SIZE,"%s/%s/Conf/%s",conf->sala,client_id,conf->cmd_type);
+  DBG("Creado topic: %s/%s/Conf/%s\n",conf->sala,client_id,conf->cmd_type);
+  if(len1 < 0 || len1 >= BUFFER_SIZE) {
+    printf("Sub Topic: %d, Buffer %d\n", len1, BUFFER_SIZE);
+    return 0;
+  }
   return 1;
 }
 /*---------------------------------------------------------------------------*/
-/*CONSTRUYE EL CLIENT_ID A PARTIR DE LA DIRECCION MAC (DEVICE_ID) SEGÚN EL FORMATO
-d:<Device_ID>, SIMPLIFICADO DE d:<ORG_ID>:<Type_ID>:<Device_ID>*/
+/*
+* CONSTRUYE EL CLIENT_ID A PARTIR DE LA DIRECCION MAC (DEVICE_ID) SEGÚN EL FORMATO
+* d:<Device_ID>, SIMPLIFICADO DE d:<ORG_ID>:<Type_ID>:<Device_ID>
+*/
 static int
 construct_client_id(void)                                                                 
 {
@@ -305,9 +409,11 @@ construct_client_id(void)
   return 1;
 }
 /*---------------------------------------------------------------------------*/
-/* ACTUALIZA LA INFORMACION SOBRE LOS TOPIC SUBSCRITOS Y DE PUBLICACIÓN,
-ESTA FUNCIÓN ES ACTIVADA DESDE LA MÁQUINA DE ESTADOS, NO SE DEBE REALIZAR 
-UNA LLAMADA DIRECTA*/
+/* 
+* ACTUALIZA LA INFORMACION SOBRE LOS TOPIC SUBSCRITOS Y DE PUBLICACIÓN,
+* ESTA FUNCIÓN ES ACTIVADA DESDE LA MÁQUINA DE ESTADOS, NO SE DEBE REALIZAR 
+* UNA LLAMADA DIRECTA
+*/
 static void
 update_config(void)
 {
@@ -331,7 +437,7 @@ update_config(void)
     return;
   }
 
-  /* Reset the counter */
+  /* Reset the counter and the subscription flag */
   seq_nr_value = 0;
   flag_sub_topic = 0;
   /*Resetea el cliente, imponiendo un estado de inicio de nuevo*/
@@ -350,8 +456,10 @@ update_config(void)
   return;
 }
 /*---------------------------------------------------------------------------*/
-/*INICIAR CONFIGURACIÓN, COPIA TODAS LAS CONSTANTES EN LA ESTRUCUTURA CONF
-LAS LONGITUDES TIENEN QUE SER AJUSTADAS SI SE MODIFICA ALGUNO DE LOS PARÁMETROS*/
+/*
+* INICIA CONFIGURACIÓN, COPIA TODAS LAS CONSTANTES EN LA ESTRUCUTURA CONF
+* LAS LONGITUDES TIENEN QUE SER AJUSTADAS SI SE MODIFICA ALGUNO DE LOS PARÁMETROS.
+*/
 static int
 init_config()
 {
@@ -372,8 +480,13 @@ init_config()
 }
 
 /*---------------------------------------------------------------------------*/
-/*REALIZA LA SUBCRIPCIÓN A UN TOPIC PREVIAMENTE PREPARADO EN CONSTRUCT_SUB_TOPIC.
-IMPORTANTE: NIVEL DE QoS == 1 */
+/*
+* Realiza las subcripciones a los topics de actuación y configuracion. Las
+* subscripciones deben ser llevadas a cabo una tras la finalización de la 
+* anterior por lo que la bandera permite la subscripción en el momento
+* adecuado evitando el llenado de la cola (la no subscripcion).
+* IMPORTANTE: NIVEL DE QoS == 1 
+*/
 static void
 subscribe()
 {
@@ -388,12 +501,24 @@ subscribe()
       }
       break;
     }
+    case 1:{
+      DBG("APP - Subscribing!\n");
+      status = mqtt_subscribe(&conn, NULL, sub_topic_Conf, MQTT_QOS_LEVEL_1);
+      if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
+        DBG("APP - Tried to subscribe but command queue was full!\n");
+      }   
+      break;
+    }
     default:
       break;
   }
 }
 /*---------------------------------------------------------------------------*/
-//PUBLICA AL BROKER
+/*
+* Publica en el broker según el topic de publicación. En este caso solo publica los datos
+* refrentes al dispositivo y los datos de temperatura y voltaje de la batería. Unicos
+* valores de la lista reading.
+*/
 static void
 publish(void)
 {
@@ -468,7 +593,9 @@ publish(void)
   DBG("APP - Publish!\n");
 }
 /*---------------------------------------------------------------------------*/
-/*SE CONECTA AL BROKER, NECESARIO LA DIRECCIÓN IP Y EL PUERTO*/
+/*
+* SE CONECTA AL BROKER, NECESARIO LA DIRECCIÓN IP Y EL PUERTO
+*/
 static void
 connect_to_broker(void)                                                                   
 {
@@ -479,11 +606,17 @@ connect_to_broker(void)
   state = MQTT_CLIENT_STATE_CONNECTING;
 }
 /*---------------------------------------------------------------------------*/
+/*
+* Maquina de estados que gestiona las conexiones, subscripciones y pubilcaciones del
+* cliente. Es disparada mediante el proceso pricncipal.
+*/
 static void
 state_machine(void)
 {
   switch(state) {
-  /*Inicio del cliente MQTT, registra la conexión (cliente) y fija el nombre de usuario y contraseña */  
+  /*
+  * Inicio del cliente MQTT, registra la conexión (cliente) y fija el nombre de usuario y contraseña 
+  */  
   case MQTT_CLIENT_STATE_INIT:
     /* If we have just been configured register MQTT connection */
     mqtt_register(&conn, &mqtt_client_process, client_id, mqtt_event,
@@ -512,7 +645,9 @@ state_machine(void)
     state = MQTT_CLIENT_STATE_REGISTERED;
     DBG("Init\n");
     /* Continue */
-  /*Conexión al Broker tras registro del cliente, el paso a CONNECTING lo hace la función connect_to_broker*/
+  /*
+  * Conexión al Broker tras registro del cliente, el paso a CONNECTING lo hace la función connect_to_broker
+  */
   case MQTT_CLIENT_STATE_REGISTERED:
     if(uip_ds6_get_global(ADDR_PREFERRED) != NULL) {
       /* Registered and with a public IP. Connect */
@@ -529,10 +664,14 @@ state_machine(void)
     /* Not connected yet. Wait */
     DBG("Connecting (%u)\n", connect_attempt);
     break;
-  /*Cliente conectado a Broker con éxito, es disparado por mqtt_event*/
+  /*
+  *Cliente conectado a Broker con éxito, es disparado por mqtt_event
+  */
   case MQTT_CLIENT_STATE_CONNECTED:
-    /*MUY IMPORTANTE: No hay break por lo qeu aunque el estado es CONNECTED,
-    se ejecuta código de PUBLISHING*/
+    /*
+    * MUY IMPORTANTE: No hay break por lo que aunque el estado es CONNECTED,
+    * se ejecuta código de PUBLISHING
+    */
     /* Continue */
   case MQTT_CLIENT_STATE_PUBLISHING:
     /* If the timer expired, the connection is stable. */

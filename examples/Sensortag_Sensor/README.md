@@ -1,4 +1,4 @@
-ALSTOM MQTT IoT ACTUADOR
+ALSTOM MQTT IoT SENSOR
 ======================
 OBJETIVOS
 ----------
