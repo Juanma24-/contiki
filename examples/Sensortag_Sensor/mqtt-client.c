@@ -118,8 +118,6 @@ static uint8_t state;
 #define BUFFER_SIZE 64
 static char client_id[BUFFER_SIZE];
 static char pub_topic[BUFFER_SIZE];
-static char sub_topic_Act[BUFFER_SIZE];
-static char sub_topic_OpMask[BUFFER_SIZE];
 /*---------------------------------------------------------------------------*/
 /*
  * The main MQTT buffers.
@@ -156,72 +154,7 @@ publish_led_off(void *d)                                                        
   leds_off(ALSTOM_MQTT_IOT_STATUS_LED);
 }
 /*---------------------------------------------------------------------------*/
-//Revisar Numeros
-static void
-pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
-            uint16_t chunk_len)
-{
-  DBG("Pub Handler: topic='%s' (len=%u), chunk_len=%u\n", topic, topic_len,
-      chunk_len);
 
-  /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
-  con los esperados ya que siempre la longitud es fija*/
-  /* If we don't like the length, ignore */
-  if((chunk_len != 1)||(topic_len!=14)) {
-    	printf("Incorrect topic or chunk len. Ignored\n");
-    	return;
-  }
-
-  /* Si el topic no coincide con la operacion asignada al Sensortag
-  se ignora. Es muy importante ya que en caso contrario se activaría en todas
-  las operaciones*/ 
-  if(strncmp(&topic[4], conf->tipo_op, 5) != 0) {				//Si las cadenas no son iguales
-    printf("Incorrect format\n");
-    return;
-  }
-  /*Comprueba que el topic termina en leds, es una medida evitable, pero importante si 
-  se introducen más topics por operación */
-  if(strncmp(&topic[topic_len - 4], "leds", 4) == 0) {
-    if(chunk[0] == '1') {
-      leds_on(LEDS_RED);
-    } else if(chunk[0] == '0') {
-      leds_off(LEDS_RED);
-    }
-    return;
-  }
-}
-/*---------------------------------------------------------------------------*/
-static void
-pub_handler_OpMask(const char *topic, uint16_t topic_len, const uint8_t *chunk,
-            uint16_t chunk_len)
-{
-  int i;
-  DBG("Pub Handler: topic='%s' (len=%u), chunk_len=%u\n", topic, topic_len,chunk_len);
-
-    /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
-    con los esperados
-    If we don't like the length, ignore*/ 
-  if((chunk_len != 5)||(topic_len!=26)) {
-    	printf("Incorrect topic or chunk len. Ignored\n");
-    	return;
-  }
-
-  /* Se comprueba si el mensaje iba para este Sensortag comprobando que coinciden los client_ID*/ 
-  if(strncmp(&topic[4], client_id, 8) != 0) {				//Si las cadenas no son iguales
-    printf("Incorrect format\n");
-    return;
-  }
-  /*SEGURIDAD:se comprueba que el topic termina en Op_Mask. Permite añadir topics en el mismo nivel*/
-  if(strncmp(&topic[topic_len - 7],"Op_Mask",7) == 0){
-  	for(i=0;i<chunk_len;i++){
-  		conf->tipo_op[i] = chunk[i];
-  	}
-  	state = MQTT_CLIENT_STATE_NEWCONFIG;
-    mqtt_disconnect(&conn);
-  	return;
-  }
-}
-/*---------------------------------------------------------------------------*/
 
 /*---------------------------------------------------------------------------*/
 /*Es el handler que se ejecuta con las interrupciones de conexión del cliente (mqtt_register)*/
@@ -261,14 +194,6 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
       DBG("APP - Application received a publish on topic '%s'. Payload "
           "size is %i bytes. Content:\n\n",
           msg_ptr->topic, msg_ptr->payload_length);
-    }
-    if(strlen(msg_ptr->topic) == 14){
-    	pub_handler_Act(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
-                msg_ptr->payload_length);
-    }
-    if(strlen(msg_ptr->topic) == 26){
-    	pub_handler_OpMask(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
-                msg_ptr->payload_length);
     }
     break;
   }
@@ -310,25 +235,6 @@ construct_pub_topic(void)
   return 1;
 }
 /*---------------------------------------------------------------------------*/
-static int
-construct_sub_topic(void)
-{
-  int len1 = snprintf(sub_topic_Act, BUFFER_SIZE, "%s/%s/leds",conf->sala,conf->tipo_op);
-  DBG("Creado topic: %s/%s/leds\n",conf->sala,conf->tipo_op);
-  /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
-  if(len1 < 0 || len1 >= BUFFER_SIZE) {
-    printf("Sub Topic: %d, Buffer %d\n", len1, BUFFER_SIZE);
-    return 0;
-  }
-  int len = snprintf(sub_topic_OpMask,BUFFER_SIZE,"%s/%s/Op_Mask",conf->sala,client_id);
-  DBG("Creado topic: %s/%s/Op_Mask\n",conf->sala,client_id);
-  if(len < 0 || len >= BUFFER_SIZE) {
-    printf("Sub Topic: %d, Buffer %d\n", len, BUFFER_SIZE);
-    return 0;
-  }
-  return 1;
-}
-/*---------------------------------------------------------------------------*/
 /*CONSTRUYE EL CLIENT_ID A PARTIR DE LA DIRECCION MAC (DEVICE_ID) SEGÚN EL FORMATO
 d:<Device_ID>, SIMPLIFICADO DE d:<ORG_ID>:<Type_ID>:<Device_ID>*/
 static int
@@ -357,13 +263,6 @@ update_config(void)
   /*Construcción del Client_ID, en caso de que la linkaddr haya sido modificada*/
   if(construct_client_id() == 0) {
     /* Fatal error. Client ID larger than the buffer */
-    state = MQTT_CLIENT_STATE_CONFIG_ERROR;
-    return;
-  }
-  /*Modificado de los topics de subscripcion, estos pueden ser modificados por
-  mensajes recibidos de ellos mismos, e.g Código de operación para topic*/
-  if(construct_sub_topic() == 0) {
-    /* Fatal error. Topic larger than the buffer */
     state = MQTT_CLIENT_STATE_CONFIG_ERROR;
     return;
   }
@@ -403,43 +302,13 @@ init_config()
   /*Eliminado la copia de Org_ID y Type_ID ya que client_ID no se forma con ellos*/
   memcpy(conf->event_type_id, ALSTOM_MQTT_IOT_DEFAULT_EVENT_TYPE_ID, 7);
   memcpy(conf->broker_ip, broker_ip, strlen(broker_ip));
-  memcpy(conf->cmd_type, ALSTOM_MQTT_IOT_DEFAULT_SUBSCRIBE_CMD_TYPE, 1);
   memcpy(conf->user_id,ALSTOM_MQTT_IOT_DEFAULT_USERNAME_ID,24);
   memcpy(conf->auth_token, ALSTOM_MQTT_IOT_DEFAULT_AUTH_TOKEN, 20);
-  memcpy(conf->tipo_op,ALSTOM_MQTT_IOT_DEFAULT_TIPO_OP,5);
   memcpy(conf->sala,ALSTOM_MQTT_IOT_DEFAULT_SALA,3);
   conf->broker_port = ALSTOM_MQTT_IOT_DEFAULT_BROKER_PORT;
   conf->pub_interval = ALSTOM_MQTT_IOT_DEFAULT_PUBLISH_INTERVAL;
 
   return 1;
-}
-
-/*---------------------------------------------------------------------------*/
-/*REALIZA LA SUBCRIPCIÓN A UN TOPIC PREVIAMENTE PREPARADO EN CONSTRUCT_SUB_TOPIC.
-IMPORTANTE: NIVEL DE QoS == 1 */
-static void
-subscribe()
-{
-  /* Publish MQTT topic in IBM quickstart format */
-  mqtt_status_t status;
-
-  DBG("APP - Subscribing!\n");
-  status = mqtt_subscribe(&conn, NULL, sub_topic_Act, MQTT_QOS_LEVEL_1);
-  if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
-    DBG("APP - Tried to subscribe but command queue was full!\n");
-  }
-}
-static void
-subscribe_topic_op()
-{
-  DBG("APP - Subscribing!\n");
-  /* Publish MQTT topic in IBM quickstart format */
-  mqtt_status_t status;
-  /*Espera mientras mqtt no esté listo, cuando esté listo, se subscribe al siguiente topic*/
-  status = mqtt_subscribe(&conn, NULL, sub_topic_OpMask, MQTT_QOS_LEVEL_1);
-  if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
-    DBG("APP - Tried to subscribe but command queue was full!\n");
-  }
 }
 /*---------------------------------------------------------------------------*/
 //PUBLICA AL BROKER
@@ -582,6 +451,7 @@ state_machine(void)
   case MQTT_CLIENT_STATE_CONNECTED:
     /*MUY IMPORTANTE: No hay break por lo qeu aunque el estado es CONNECTED,
     se ejecuta código de PUBLISHING*/
+    state=MQTT_CLIENT_STATE_PUBLISHING;
     /* Continue */
   case MQTT_CLIENT_STATE_PUBLISHING:
     /* If the timer expired, the connection is stable. */
@@ -601,21 +471,6 @@ state_machine(void)
         * a diferentes topics,para acelerar el proceso se fuerza la 
         * ejecucion recursiva de state_machine.
         */
-        switch (flag_sub_topic){                                              
-          case 0:{
-            subscribe();
-            break;                                                          
-          }
-          case 1:{
-            subscribe_topic_op();
-            break;
-          }
-          default:  
-            state = MQTT_CLIENT_STATE_PUBLISHING;
-            break;
-          }
-          //state_machine();
-          process_poll(&mqtt_client_process);
       } else {
         leds_on(ALSTOM_MQTT_IOT_STATUS_LED);                                  //Enciende LED verde
         ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL);
