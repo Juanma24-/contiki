@@ -28,11 +28,14 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /**
- * \addtogroup cc26xx-web-demo
+ * \addtogroup ALSTOM
  * @{
  *
  * \file
- *   MQTT/IBM cloud service client for the CC26XX web demo.
+ *    Cliente MQTT para el envío de señales de sensores. Cada Intervalo segundos envía 
+ *    los datos de los sensores al broker según un topic predefinido. El intervalo de 
+ *    publicación se puede fijar mediante un topic de configuración al que se subscribe
+ *    el Sensortag al inicio.
  */
 /*---------------------------------------------------------------------------*/
 #include "contiki-conf.h"
@@ -167,7 +170,7 @@ publish_led_off(void *d)                                                        
 /*
 * Handler de la subcripción a Configuracion. Cuando se active este handler
 * se comprueba que el cliente del topic coincide con el cliente del Sensortag.
-* Si es así se modifica el interavalo y se actualiza la configuración. 
+* Si es así se modifica el intervalo y se actualiza la configuración. 
 */
 static void
 pub_handler_Conf(const char *topic, uint16_t topic_len, const uint8_t *chunk,
@@ -191,7 +194,7 @@ pub_handler_Conf(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   }
   /*SEGURIDAD:se comprueba que el topic termina en Intervalo.*/
   if(strncmp(&topic[topic_len - 9],"Intervalo",9) == 0){
-    conf->pub_interval = chunk;
+    conf->pub_interval = *chunk;
   	state = MQTT_CLIENT_STATE_NEWCONFIG;
     mqtt_disconnect(&conn);
   	return;

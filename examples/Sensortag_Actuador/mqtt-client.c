@@ -32,7 +32,11 @@
  * @{
  *
  * \file
- *   MQTT/IBM cloud service client for the CC26XX web demo.
+ *   Cliente MQTT para uso como actuador. El Sensortag se subscribe a 4 topic llamados
+ *   de actuación porque su función es actuar sobre el led rojo. Estos topics pueden
+ *   ser configurados mediante topics de configuracion asociados al id del cliente.
+ *   Por último, el Sensortag también publica en un intervalo de baja frecuencia datos
+ *   relacionados con su consumo para poder monitorizar el nivel de batería.
  */
 /*---------------------------------------------------------------------------*/
 #include "contiki-conf.h"
@@ -112,7 +116,7 @@ static uint8_t state;
  * Cada topic de actuación lleva ligado uno de configuración y puede haber
  * tantos como se precise.
  *  ACTUACION:
- *              A01/PIN01/leds
+ *              A01/DEF00/leds
  *  CONFIGURACION
  *              A01/d:00124bXXXXXX/Conf/1
  *  PUBLICACION
@@ -133,8 +137,6 @@ static char sub_topic_Conf[BUFFER_SIZE];
 #define APP_BUFFER_SIZE 512
 static struct mqtt_connection conn;
 static char app_buffer[APP_BUFFER_SIZE];
-/*---------------------------------------------------------------------------*/
-//#define QUICKSTART "quickstart"
 /*---------------------------------------------------------------------------*/
 static struct mqtt_message *msg_ptr = 0;
 static struct etimer publish_periodic_timer;
@@ -157,7 +159,7 @@ mqtt_client_config_t *conf;
 /*---------------------------------------------------------------------------*/
 /* 
  * Bandera que indica el topic al que debe subscribirse el dispositivo. Es 
- * incrementa por el evento de subscripción del cliente mqtt (mqtt_event) y 
+ * incrementado por el evento de subscripción del cliente mqtt (mqtt_event) y 
  * reiniciada cuando se ha de actualizar la configuración (update_conf).
 */
 int flag_sub_topic = 0;
@@ -172,7 +174,7 @@ publish_led_off(void *d)                                                        
 /*---------------------------------------------------------------------------*/
 /*
 * Handler de la subcripción a Actuaciónes. Será disparado cuando se envíe un mensaje
-* binario (1/0) a un topic de operación al que el dispositivo esté ligado. En este
+* binario (1/0) a un topic de actuación al que el dispositivo esté ligado. En este
 * handler se comprueba que el topic es el correcto y en caso afirmativo se enciende
 * el LED rojo. 
 * Este handler gestionará todas las actuaciones por muchas operaciones a las que se 
@@ -185,7 +187,7 @@ pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
 {
   DBG("Pub Handler: topic='%s' (len=%u), chunk_len=%u\n", topic, topic_len,chunk_len);
 
-  /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
+  /* Se comprueba la longitud del topic y del mensaje para comprobar si coinciden
   con los esperados ya que siempre la longitud es fija*/
   /* If we don't like the length, ignore */
   if((chunk_len != 1)||(topic_len!=14)) {
@@ -228,10 +230,10 @@ pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
 }
 /*---------------------------------------------------------------------------*/
 /*
-* Handler de la subcripción a Configuracion. Habra tantas subscripciones a configuraciones
-* como a actuaciones, ya que cada actuación debe poder modificada dinámicamente. Cada topic
-* de configuracion lleva asigando un número por lo que es importante tner un registro externo 
-* de las configuraciones en cada lugar para poder cambiar una antiga por otra nueva sin fallos. 
+* Handler de la subcripción a Configuración. Habrá tantas subscripciones a configuraciones
+* como a actuaciones, ya que cada actuación debe poder ser modificada dinámicamente. Cada topic
+* de configuración lleva asigado un número por lo que es importante tener un registro externo 
+* de las configuracion del dispositivo para poder cambiar una antigua por otra nueva sin fallos. 
 */
 static void
 pub_handler_Conf(const char *topic, uint16_t topic_len, const uint8_t *chunk,
@@ -249,7 +251,7 @@ pub_handler_Conf(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   }
 
   /* Se comprueba si el mensaje iba para este Sensortag comprobando que coinciden los client_ID*/ 
-  if(strncmp(&topic[4], client_id, 8) != 0) {				//Si las cadenas no son iguales
+  if(strncmp(&topic[4], client_id, 14) != 0) {				//Si las cadenas no son iguales
     printf("Incorrect format\n");
     return;
   }
@@ -345,8 +347,12 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
   /*Subscripcion a topic realizada con éxito*/
   case MQTT_EVENT_SUBACK: {
     DBG("APP - Application is subscribed to topic successfully\n");
+    /*
+    * Cada vez que se realiza una subscripción con éxito esta bandera aumenta en 1.
+    * Esto permite realizar la siguiente subscripción. Así hasta que la bandera supere
+    * el número máximo de subscripciones.
+    */
     flag_sub_topic = flag_sub_topic + 1;
-    /*Ya se ha subscrito a los topics básicos, ahora se subscribe al resto, disparandolos según el valor del flag*/
     break;
   }
   /*Des-subscripcion realizada con éxito*/
@@ -368,7 +374,7 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
 /*
 * Construye el topic de publicación a partir de los datos del dispostivo
 * y el formato impuesto. Este topic debe estar reservado al comienzo del
- código en este archivo.
+* código en este archivo.
 */
 static int
 construct_pub_topic(void)
@@ -386,14 +392,14 @@ construct_pub_topic(void)
 }
 /*---------------------------------------------------------------------------*/
 /*
-* Construye los topics de subscripción a partir de los datos del dispostivo
+* Construye los topics de subscripción a partir de los datos del dispositivo
 * y el formato impuesto. Crea varios de ellos. Es necesario que estos topics
 * hayan sido reservados al comienzo del código en este archivo. 
-* Los topics de actuación son creados explicitamente los necesarios. Podría
-* haberse utilizado el comando "+" pero en ese caso actuarí ante cada orden que 
+* Los topics de actuación son creados explicitamente en el numero necesario. Podría
+* haberse utilizado el comando "+" pero en ese caso actuaría ante cada orden que 
 * fuera a cada Sensortag, con el consecuente gasto de recursos y batería.
 * En cambio los topics de configuracion son reservados con el comando "+" ya que 
-* ya viene filtrados por el Id del cliente. 
+* ya vienen filtrados por el Id del cliente. 
 */
 static int
 construct_sub_topic(void)
@@ -401,6 +407,9 @@ construct_sub_topic(void)
   /*Construción topics de Actuación*/
   int i;
   int len[4];
+  /*
+  * El bucle permite crear el número de topics de actuacion reservados. 
+  */
   for(i=0;i<4;i++){
     len[i] = snprintf(sub_topic_Act[i], BUFFER_SIZE, "%s/%s/leds",conf->sala,conf->tipo_op[i]);
     DBG("Creado topic: %s/%s/leds\n",conf->sala,conf->tipo_op[i]);
@@ -444,7 +453,7 @@ construct_client_id(void)
 /* 
 * ACTUALIZA LA INFORMACION SOBRE LOS TOPIC SUBSCRITOS Y DE PUBLICACIÓN,
 * ESTA FUNCIÓN ES ACTIVADA DESDE LA MÁQUINA DE ESTADOS, NO SE DEBE REALIZAR 
-* UNA LLAMADA DIRECTA
+* UNA LLAMADA DIRECTA.
 */
 static void
 update_config(void)
