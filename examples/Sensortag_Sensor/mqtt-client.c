@@ -194,7 +194,9 @@ pub_handler_Conf(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   }
   /*SEGURIDAD:se comprueba que el topic termina en Intervalo.*/
   if(strncmp(&topic[topic_len - 9],"Intervalo",9) == 0){
-    conf->pub_interval = *chunk;
+
+    conf->pub_interval = (strtol(chunk,NULL,10) * CLOCK_SECOND);
+    DBG("Intervalo: %s, Chunk: %s\n",conf->pub_interval, chunk);
   	state = MQTT_CLIENT_STATE_NEWCONFIG;
     mqtt_disconnect(&conn);
   	return;

@@ -759,7 +759,7 @@ state_machine(void)
         * a diferentes topics,para acelerar el proceso se fuerza la 
         * ejecucion recursiva de state_machine.
         */
-        if(flag_sub_topic<2){
+        if(flag_sub_topic<5){
           subscribe();
         }else{
           state = MQTT_CLIENT_STATE_PUBLISHING;
