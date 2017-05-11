@@ -454,8 +454,7 @@ get_batmon_reading(void *data)
 {
   int value;
   char *buf;
-  clock_time_t next = SENSOR_READING_PERIOD +
-    (random_rand() % SENSOR_READING_RANDOM);
+  clock_time_t next = SENSOR_READING_PERIOD +(random_rand() % SENSOR_READING_RANDOM);
 
   if(batmon_temp_reading.publish) {
     value = batmon_sensor.value(BATMON_SENSOR_TYPE_TEMP);
