@@ -99,6 +99,16 @@
 #define ALSTOM_MQTT_IOT_SENSOR_HDC_TEMP      6
 #define ALSTOM_MQTT_IOT_SENSOR_HDC_HUMIDITY  7
 #define ALSTOM_MQTT_IOT_SENSOR_OPT_LIGHT     8
+/*Sensors Limits*/
+#define ALSTOM_MQTT_IOT_SENSOR_BATMON_TEMP_LIMIT   4000
+#define ALSTOM_MQTT_IOT_SENSOR_BATMON_VOLT_LIMIT   2250
+#define ALSTOM_MQTT_IOT_SENSOR_BMP_PRES_LIMIT      200000
+#define ALSTOM_MQTT_IOT_SENSOR_BMP_TEMP_LIMIT      4000
+#define ALSTOM_MQTT_IOT_SENSOR_TMP_AMBIENT_LIMIT   40000
+#define ALSTOM_MQTT_IOT_SENSOR_TMP_OBJECT_LIMIT    40000
+#define ALSTOM_MQTT_IOT_SENSOR_HDC_TEMP_LIMIT      4000
+#define ALSTOM_MQTT_IOT_SENSOR_HDC_HUMIDITY_LIMIT  9000
+#define ALSTOM_MQTT_IOT_SENSOR_OPT_LIGHT_LIMIT     5000
 /*---------------------------------------------------------------------------*/
 extern process_event_t alstom_mqtt_iot_publish_event;
 extern process_event_t alstom_mqtt_iot_config_loaded_event;
@@ -112,27 +122,37 @@ extern process_event_t alstom_mqtt_iot_load_config_defaults;
 /*---------------------------------------------------------------------------*/
 /* A data type for sensor readings, internally stored in a linked list */
 #define ALSTOM_MQTT_IOT_CONVERTED_LEN        12
-
+/*
+* Estructura de datos para lectura del senosor. Guarda toda la información necesaria
+* para realizar l apubliación y actualizar los datos de medida.
+*/
 typedef struct alstom_mqtt_iot_sensor_reading {
-  struct alstom_mqtt_iot_sensor_reading *next;
-  int raw;
-  int last;
-  const char *descr;
+  struct alstom_mqtt_iot_sensor_reading *next;        //Puntero a la siguiente estructura (necesario para bucles de lectura)
+  int raw;                                            //Lectura directa del sensor
+  int last;                                           //Lectura anterior a la actual.
+  const char *descr;          
   const char *xml_element;
   const char *form_field;
   char *units;
-  uint8_t type;
-  uint8_t publish;
-  uint8_t changed;
-  uint32_t interval;
-  char converted[ALSTOM_MQTT_IOT_CONVERTED_LEN];
+  uint8_t type;                                       //Código de tipo de sensor (permite acceder a un sensor en concreto)
+  uint8_t publish;                                    // 1-> Se publica el valor de la medida 0-> No se publica el valor de la medida
+  uint8_t changed;                                    // 1-> Se ha obtenido una nueva medida del sensor
+  uint32_t interval;                                  // Número de segundos entre lecturas del sensor.
+  uint16_t limit;                                     // Límite, si se sobrepasa se envía una alarma a la nube.
+  char converted[ALSTOM_MQTT_IOT_CONVERTED_LEN];      // Lectura convertida a string para ser enviada al broker.
 } alstom_mqtt_iot_sensor_reading_t;
 /*---------------------------------------------------------------------------*/
-/* Global configuration */
+/* Global configuration 
+*  Configuración global de los sensores. Permite recuperar la configuración anterior 
+*  tras un reinicio. Modificada mediante las funciones save_config y load_config. 
+*/
 typedef struct alstom_mqtt_iot_config_s {
   uint32_t magic;
   int len;
-  uint32_t sensors_bitmap;
+  uint32_t sensors_bitmap;                        //Almacena el valor publish en un array binario. La posicón del sensor 
+                                                  //en ese array la determina la propiedad type.
+  uint32_t sensors_intervals[9];                  //Intervalos de medida de los sensores.
+  uint16_t sensors_limits[9];                     //Limites de los sensores 
   int def_rt_ping_interval;
   mqtt_client_config_t mqtt_config;
 } alstom_mqtt_iot_config_t;
@@ -150,7 +170,7 @@ const alstom_mqtt_iot_sensor_reading_t *alstom_mqtt_iot_sensor_lookup(int sens_t
  * \brief Returns the first available sensor reading
  * \return A pointer to the reading data structure or NULL
  */
-const alstom_mqtt_iot_sensor_reading_t *alstom_mqtt_iot_sensor_first(void);
+alstom_mqtt_iot_sensor_reading_t *alstom_mqtt_iot_sensor_first(void);
 
 /**
  * \brief Print an IPv6 address into a buffer
@@ -162,8 +182,7 @@ const alstom_mqtt_iot_sensor_reading_t *alstom_mqtt_iot_sensor_first(void);
  *
  * It is the caller's responsibility to allocate enough space for buf
  */
-int alstom_mqtt_iot_ipaddr_sprintf(char *buf, uint8_t buf_len,
-                                   const uip_ipaddr_t *addr);
+int alstom_mqtt_iot_ipaddr_sprintf(char *buf, uint8_t buf_len,const uip_ipaddr_t *addr);
 
 /**
  * \brief Resets the example to a default configuration
@@ -171,9 +190,22 @@ int alstom_mqtt_iot_ipaddr_sprintf(char *buf, uint8_t buf_len,
 void alstom_mqtt_iot_restore_defaults(void);
 
 
-
+/**
+ * \brief Inicia las lecturas de los sensores cuyo publish == 1.
+ */
 void init_sensor_readings(void);
-void compare_and_update(alstom_mqtt_iot_sensor_reading_t *reading)
+
+/**
+ * \brief Actualiza el paŕametro Changed a 1. Utilizado tras la lectura de un sensor
+ *        También puede actualizarlo según la comparación entre last y raw (funcion 
+ *        deshabilitada actualmente)
+ */
+void compare_and_update(alstom_mqtt_iot_sensor_reading_t *reading);
+
+/**
+ * \brief Guarda la configuración en la memoria Flash externa.
+ */
+void save_config();
 /*---------------------------------------------------------------------------*/
 #endif /* ASLTOM_MQTT_IOT_H_ */
 /*---------------------------------------------------------------------------*/

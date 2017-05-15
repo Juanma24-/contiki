@@ -132,7 +132,8 @@ static char sub_topic_Act[BUFFER_SIZE];
 static char sub_topic_ConfA[BUFFER_SIZE];
 static char sub_topic_ConfP[BUFFER_SIZE];
 
-static uint8_t alarmOn;
+static uint8_t *alarmOnp;
+static uint8_t alarmOn=10;
 /*---------------------------------------------------------------------------*/
 /*
  * The main MQTT buffers.
@@ -273,8 +274,8 @@ pub_handler_ConfA(const char *topic, uint16_t topic_len, const uint8_t *chunk,
 /*---------------------------------------------------------------------------*/
 /*
 * Modifica los sensores que son publicados en el mensaje. Para ello recorre la lista de sensores añadidos 
-* y modifaca la propiedad publish del que coincida con el nombre del topic. No es necesario resetear la conexión
-* ya que por defecto esta propiedad se comprueba cada segundo.
+* y modifica la propiedad publish del que coincida con el nombre del topic. 
+* Además modifica los intervalos de publicación de los sensores y los limites de alarma.
 */
 static void
 pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
@@ -305,11 +306,13 @@ pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
             reading->publish = 0;
             snprintf(reading->converted, ALSTOM_MQTT_IOT_CONVERTED_LEN, "\"N/A\"");
             DBG("Desactivada publicación de %s\n",reading->form_field);
+            save_config();
             return;
           } else if(chunk[0] == '1') {
             reading->publish = 1;
             init_sensor_readings();
             DBG("Activada publicación de %s\n",reading->form_field);
+            save_config();
             return;
           }
         }   
@@ -320,7 +323,18 @@ pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
      for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
         if(strncmp(&topic[topic_len - 4 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
           reading->interval = atoi(chunk);
-          DBG("Modificado Intervalo de %s. Nuevo intervalo: %d\n",reading->form_field,reading->interval);
+          DBG("Modificado Intervalo de %s. Nuevo intervalo:%d\n",reading->form_field,reading->interval);
+          init_sensor_readings();
+          return;
+        }   
+      }
+      return;
+  }
+  if(strncmp(&topic[topic_len - 3],"Lim",3) == 0){
+     for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
+        if(strncmp(&topic[topic_len - 4 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
+          reading->limit = atoi(chunk);
+          DBG("Modificado Límite de %s. Nuevo Límite:%d\n",reading->form_field,reading->interval);
           return;
         }   
       }
@@ -663,8 +677,8 @@ publish(void)
   for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
     if(reading->publish && reading->raw != CC26XX_SENSOR_READING_ERROR) {
       /*
-      * Dado que hay diferentes frecuencias de publicación, solo se publica un valor si ha cambiado con respecto
-      * al dato anterior. Evita sobrecarga en la publicación y repetición de medidas ya enviadas.
+      * Dado que hay diferentes frecuencias de publicación, solo se publica un valor si ha sido medido en este 
+      * intervalo. Evita sobrecarga en la publicación y repetición de medidas ya enviadas.
       */
       if(reading->changed == 1){
         len = snprintf(buf_ptr, remaining,",\"%s (%s)\":%s", reading->descr, reading->units,reading->converted);                                                           //LECTURAS DE SENSORES
@@ -674,6 +688,8 @@ publish(void)
         }
         remaining -= len;
         buf_ptr += len;
+        reading->changed = 0;
+        DBG("%s publicado, changed: %d \n",reading->form_field,reading->changed);
       }
     }
   }
@@ -692,13 +708,13 @@ publish(void)
 }
 /*---------------------------------------------------------------------------*/
 /*
-* Publica en el broker según el topic de publicación. En este caso solo publica los datos
-* refrentes al dispositivo y los datos de temperatura y voltaje de la batería. Unicos
-* valores de la lista reading.
+* Publica una alram si algún sensor ha superado el valor limite impuesto. También salta la alarma 
+* si se pulsa el boton para apagar el led.
 */
 static void
-alarm(void)
+alarm(uint8_t type)
 {
+  DBG("Ha entrado en la publicación de alarma, %d\n",type);
   int len;
   int remaining = APP_BUFFER_SIZE;
   char def_rt_str[64];
@@ -740,13 +756,62 @@ alarm(void)
 
   memcpy(&def_route, uip_ds6_defrt_choose(), sizeof(uip_ip6addr_t));
 
-  len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"OFF");
+  switch(type){
+    case 0:{
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Batmon Temp: Se ha superado el valor limite");
+      break;
+    }
+    case 1:{
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Batmon Volt: Se ha superado el valor limite");
+      break;
+    }
+    case 2:{
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Bmp Pres: Se ha superado el valor limite");
+      break;    
+    }
+    case 3:{
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Bmp Temp: Se ha superado el valor limite");
+      break;
+    }
+    case 4:{
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Tmp Ambient: Se ha superado el valor limite");
+      break;
+    }
+    case 5:{
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Tmp Object: Se ha superado el valor limite");
+      break;
+    }
+    case 6:{
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Hdc Temp: Se ha superado el valor limite");
+      break;
+    }
+    case 7:{
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Hdc Humidity: Se ha superado el valor limite");
+      break;
+    }
+    case 8:{
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Opt Light: Se ha superado el valor limite");
+      break;
+    }
+    case 9:{
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Button:Se_ha_pulsado_el_boton");
+      DBG("Añadido a buffer, boton pulsado\n");
+      break;
+    }
+
+    default:{
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"No se ha podido determianr motivo");
+      break;
+    }
+  }
+  
   if(len < 0 || len >= remaining) {
     printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
     return;
   }
   remaining -= len;
   buf_ptr += len;
+
   len = snprintf(buf_ptr, remaining, "}}");
 
   if(len < 0 || len >= remaining) {
@@ -754,9 +819,8 @@ alarm(void)
     return;
   }
 
-  mqtt_publish(&conn, NULL, alarm_topic, (uint8_t *)app_buffer,
-               strlen(app_buffer), MQTT_QOS_LEVEL_0, MQTT_RETAIN_OFF);                                //PUBLICA
-                                                                                                      //IMP:SIN RETENCION Y POR LO TANTO QoS==0
+  mqtt_publish(&conn, NULL, alarm_topic, (uint8_t *)app_buffer,strlen(app_buffer), MQTT_QOS_LEVEL_0, MQTT_RETAIN_OFF);                                
+                                                                                                      
   DBG("APP - Publish!\n");
 }
 /*---------------------------------------------------------------------------*/
@@ -869,19 +933,20 @@ state_machine(void)
         * Si la máquina de estados ha saltado por acción del operario, se publica la alarma 
         * y se baja la bandera. En caso contario se realiza una publicación de los sensores.
         */
-        if(alarmOn == 1){
-          alarm(); 
-          alarmOn = 0; 
+        if(alarmOn != 10){
+          alarm(alarmOn);
+          DBG("Publicando alarma %d\n",alarmOn); 
+          alarmOn = 10; 
         }else{
-        leds_on(ALSTOM_MQTT_IOT_STATUS_LED);                                  //Enciende LED verde
-        ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL);
-        publish();
-        /*
-        * Tras la publicación, se chequea la lista de sensores y se modifica el valor changed. Así solo
-        * se publicarán aquellos valores que hayan sido modificados.
-        */
-        for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
-          compare_and_update(reading);
+          leds_on(ALSTOM_MQTT_IOT_STATUS_LED);                                  //Enciende LED verde
+          ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL);
+          publish();
+          DBG("Publicando valores de sensores\n");
+          /*
+          * Tras la publicación, se chequea la lista de sensores y se modifica el valor changed. Así solo
+          * se publicarán aquellos valores que hayan sido modificados.
+          */
+        
         }                                                            
       }
       /*
@@ -889,7 +954,7 @@ state_machine(void)
       * y cuyo intervalo de toma de datos sea menor, será el intervalo de publicación 
       * del sensortag.
       */
-      uint32_t minterval = ALSTOM_MQTT_IOT_DEFAULT_PUBLISH_INTERVAL/CLOCK_SECOND;
+      uint32_t minterval = ALSTOM_MQTT_IOT_RSSI_MEASURE_INTERVAL_MAX;
 
       for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
         if((reading->interval < minterval) && (reading->publish == 1)){
@@ -977,7 +1042,6 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
   PROCESS_BEGIN();
 
   printf("CC26XX MQTT Client Process\n");
-
   conf = &alstom_mqtt_iot_config.mqtt_config;          //Carga la configuración 
   if(init_config() != 1) {                             //Ejecuta init_config, cargando la estructura de configuración del cliente
     PROCESS_EXIT();
@@ -1004,6 +1068,15 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
        (ev == sensors_event && data == ALSTOM_MQTT_IOT_MQTT_PUBLISH_TRIGGER)) {
       state_machine();
     }
+    /*
+    *Si llega un evento de publicación con datos del sensor que ha superado un valor límite.
+    */
+    if(ev == alstom_mqtt_iot_publish_event && data != NULL){
+        alarmOnp=data;
+        alarmOn=*alarmOnp;
+        state_machine();
+      
+    }
     /*Si salta evento de carga de configuracion por defecto*/
     if(ev == alstom_mqtt_iot_load_config_defaults) {
       init_config();
@@ -1014,7 +1087,7 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
     * se envía un mensaje de alarma al broker.
     */
     if(ev == sensors_event && data == ALSTOM_MQTT_IOT_OP_LED_OFF){
-      alarmOn = 1;
+      alarmOn = 9;
       leds_off(ALSTOM_MQTT_IOT_OP_LED);
       state_machine();
     }
