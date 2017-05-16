@@ -102,7 +102,7 @@
 /*Sensors Limits*/
 #define ALSTOM_MQTT_IOT_SENSOR_BATMON_TEMP_LIMIT   4000
 #define ALSTOM_MQTT_IOT_SENSOR_BATMON_VOLT_LIMIT   2250
-#define ALSTOM_MQTT_IOT_SENSOR_BMP_PRES_LIMIT      200000
+#define ALSTOM_MQTT_IOT_SENSOR_BMP_PRES_LIMIT      20000
 #define ALSTOM_MQTT_IOT_SENSOR_BMP_TEMP_LIMIT      4000
 #define ALSTOM_MQTT_IOT_SENSOR_TMP_AMBIENT_LIMIT   40000
 #define ALSTOM_MQTT_IOT_SENSOR_TMP_OBJECT_LIMIT    40000
@@ -138,7 +138,7 @@ typedef struct alstom_mqtt_iot_sensor_reading {
   uint8_t publish;                                    // 1-> Se publica el valor de la medida 0-> No se publica el valor de la medida
   uint8_t changed;                                    // 1-> Se ha obtenido una nueva medida del sensor
   uint32_t interval;                                  // Número de segundos entre lecturas del sensor.
-  uint16_t limit;                                     // Límite, si se sobrepasa se envía una alarma a la nube.
+  uint32_t limit;                                     // Límite, si se sobrepasa se envía una alarma a la nube.
   char converted[ALSTOM_MQTT_IOT_CONVERTED_LEN];      // Lectura convertida a string para ser enviada al broker.
 } alstom_mqtt_iot_sensor_reading_t;
 /*---------------------------------------------------------------------------*/

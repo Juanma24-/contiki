@@ -62,7 +62,6 @@ PROCESS(alstom_mqtt_iot_process, "CC26XX Web Demo");
  */
 #define SENSOR_READING_PERIOD (CLOCK_SECOND * 30)
 #define SENSOR_READING_RANDOM (CLOCK_SECOND << 1)
-#define SENSOR_DEF_LIMIT 1<<10
 
 struct ctimer batmon_timer;
 struct ctimer bmp_timer, hdc_timer, tmp_timer, opt_timer, mpu_timer;
