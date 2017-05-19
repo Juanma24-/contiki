@@ -48,7 +48,7 @@
 #include "batmon-sensor.h"
 #include "alstom-mqtt-iot.h"
 #include "mqtt-client.h"
-
+//#include "ti/mw/lcd/LCDDogm1286.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -103,7 +103,7 @@ LIST(sensor_list);
 */
 #define DEMO_SENSOR(name, type, descr, xml_element, form_field, units,limit) \
   alstom_mqtt_iot_sensor_reading_t name##_reading = \
-  { NULL, 0, 0, descr, xml_element, form_field, units, type, 0, 0, 30, limit}
+  { NULL, 0, 0, descr, xml_element, form_field, units, type, 0, 0, 30, limit,0}
 
 /* CC26xx sensors */
 DEMO_SENSOR(batmon_temp, ALSTOM_MQTT_IOT_SENSOR_BATMON_TEMP,"Battery Temp", "battery-temp", "batmon_temp",ALSTOM_MQTT_IOT_UNIT_TEMP,ALSTOM_MQTT_IOT_SENSOR_BATMON_TEMP_LIMIT);
@@ -151,15 +151,19 @@ save_config()
     alstom_mqtt_iot_config.magic = CONFIG_MAGIC;
     alstom_mqtt_iot_config.len = sizeof(alstom_mqtt_iot_config_t);
     alstom_mqtt_iot_config.sensors_bitmap = 0;
+    alstom_mqtt_iot_config.limits_bitmap = 0;
 
     for(reading = list_head(sensor_list);reading != NULL;reading = list_item_next(reading)) {
       if(reading->publish) {
-        alstom_mqtt_iot_config.sensors_bitmap |= (1 << reading->type);
-        alstom_mqtt_iot_config.sensors_intervals[reading->type] = reading->interval;
-        alstom_mqtt_iot_config.sensors_limits[reading->type] = reading->limit;
+        alstom_mqtt_iot_config.sensors_bitmap |= (1 << reading->type); 
       }
+      if(reading->limitOn) {
+        alstom_mqtt_iot_config.limits_bitmap |= (1 << reading->type);
+        
+      }
+      alstom_mqtt_iot_config.sensors_intervals[reading->type] = reading->interval;
+      alstom_mqtt_iot_config.sensors_limits[reading->type] = reading->limit;
     }
-
     rv = ext_flash_write(CONFIG_FLASH_OFFSET, sizeof(alstom_mqtt_iot_config_t),(uint8_t *)&alstom_mqtt_iot_config);
     if(!rv) {
       printf("Error saving config\n");
@@ -197,6 +201,8 @@ load_config()
 
   if(tmp_cfg.magic == CONFIG_MAGIC && tmp_cfg.len == sizeof(tmp_cfg)) {
     memcpy(&alstom_mqtt_iot_config, &tmp_cfg, sizeof(alstom_mqtt_iot_config));
+  }else{
+    return;
   }
 
   for(reading = list_head(sensor_list);reading != NULL;reading = list_item_next(reading)) {
@@ -204,6 +210,12 @@ load_config()
       reading->publish = 1;
     } else {
       reading->publish = 0;
+      snprintf(reading->converted, ALSTOM_MQTT_IOT_CONVERTED_LEN, "\"N/A\"");
+    }
+    if(alstom_mqtt_iot_config.limits_bitmap & (1 << reading->type)) {
+      reading->limitOn = 1;
+    } else {
+      reading->limitOn = 0;
       snprintf(reading->converted, ALSTOM_MQTT_IOT_CONVERTED_LEN, "\"N/A\"");
     }
     reading->interval = alstom_mqtt_iot_config.sensors_intervals[reading->type];
@@ -324,7 +336,7 @@ get_batmon_reading(void *data)
       * Si el valor de temperatura de la batería está por encima 
       * de un valor límite, se publica de forma inmediata una alarma.
       */
-      if(value > batmon_temp_reading.limit){
+      if((value > batmon_temp_reading.limit) && batmon_temp_reading.limitOn){
         process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&batmon_volt_reading.type);
       }
     }
@@ -342,7 +354,7 @@ get_batmon_reading(void *data)
       /* 
       * Si el valor de batería está por debajo de un valor límite, se publica de forma inmediata una alarma.
       */
-      if(((value *125) >> 5) < batmon_volt_reading.limit){
+      if((((value *125) >> 5) < batmon_volt_reading.limit) && batmon_volt_reading.limitOn){
         process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&batmon_volt_reading.type);
       }
 
@@ -401,7 +413,7 @@ get_bmp_reading()
       * Si el valor de presion del sensor está por encima 
       * de un valor límite, se publica de forma inmediata una alarma.
       */
-      if(value > bmp_pres_reading.limit){
+      if((value > bmp_pres_reading.limit) && bmp_pres_reading.limitOn){
         process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&bmp_pres_reading.type);
       }
       
@@ -422,7 +434,7 @@ get_bmp_reading()
       * Si el valor de temperatura del sensor está por encima 
       * de un valor límite, se publica de forma inmediata una alarma.
       */
-      if(value > bmp_temp_reading.limit){
+      if((value > bmp_temp_reading.limit) && bmp_temp_reading.limitOn){
         process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&bmp_temp_reading.type);
       }
       
@@ -462,7 +474,7 @@ get_tmp_reading()
       * Si el valor de temperatura del sensor está por encima 
       * de un valor límite, se publica de forma inmediata una alarma.
     */ 
-    if(value > tmp_amb_reading.limit){
+    if((value > tmp_amb_reading.limit) && tmp_amb_reading.limitOn){
       process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&tmp_amb_reading.type);
     }
       
@@ -481,7 +493,7 @@ get_tmp_reading()
       * Si el valor de temperatura del sensor está por encima 
       * de un valor límite, se publica de forma inmediata una alarma.
     */
-    if(value > tmp_obj_reading.limit){
+    if((value > tmp_amb_reading.limit) && tmp_amb_reading.limitOn){
       process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&tmp_obj_reading.type);
     }
   }
@@ -512,7 +524,7 @@ get_hdc_reading()
       * Si el valor de temperatura del sensor está por encima 
       * de un valor límite, se publica de forma inmediata una alarma.
       */
-      if(value > hdc_temp_reading.limit){
+      if((value > hdc_temp_reading.limit) && hdc_temp_reading.limitOn){
         process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&hdc_temp_reading.type);
       }
     }
@@ -532,7 +544,7 @@ get_hdc_reading()
       * Si el valor de humedad del sensor está por encima 
       * de un valor límite, se publica de forma inmediata una alarma.
       */
-      if(value > hdc_hum_reading.limit){
+      if((value > hdc_hum_reading.limit) && hdc_hum_reading.limitOn){
         process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&hdc_hum_reading.type);
       }
     }
@@ -561,7 +573,7 @@ get_light_reading()
     * Si el valor de temperatura del sensor está por encima 
     * de un valor límite, se publica de forma inmediata una alarma.
     */  
-    if(value > opt_reading.limit){
+    if((value > opt_reading.limit) && opt_reading.limitOn){
       process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&opt_reading.type);
     }
   }
@@ -663,6 +675,7 @@ PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
   alstom_mqtt_iot_config_loaded_event = process_alloc_event();
   alstom_mqtt_iot_load_config_defaults = process_alloc_event();
 
+
   process_start(&mqtt_client_process, NULL);                                                                                       
 
   /*
@@ -670,7 +683,8 @@ PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
    * own defaults and restore saved config from flash...
    */
   alstom_mqtt_iot_config.def_rt_ping_interval = ALSTOM_MQTT_IOT_DEFAULT_RSSI_MEAS_INTERVAL;
-  load_config();                                                                  
+
+  load_config();                                                              
 
   /*
    * Notify all other processes (basically the ones in this demo) that the
@@ -679,7 +693,12 @@ PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
   process_post(PROCESS_BROADCAST, alstom_mqtt_iot_config_loaded_event, NULL);
 
   init_sensor_readings();
-
+  /*
+  * Prueba de inicio pantalla LCD 
+  
+  LCD_init();
+  
+  */
   def_rt_rssi = 0x8000000;
   uip_icmp6_echo_reply_callback_add(&echo_reply_notification,echo_reply_handler);
   etimer_set(&echo_request_timer, ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC);

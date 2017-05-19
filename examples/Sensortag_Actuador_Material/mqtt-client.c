@@ -124,6 +124,9 @@ static uint8_t state;
  *
  * We also need space for the null termination
  */
+#define CONFIG_FLASH_OFFSET        0
+#define CONFIG_MAGIC      0xCC265002
+
 #define BUFFER_SIZE 64
 static char client_id[BUFFER_SIZE];
 static char pub_topic[BUFFER_SIZE];
@@ -142,7 +145,7 @@ static uint8_t Info=0;
  * The main MQTT buffers.
  * We will need to increase if we start publishing more data.
  */
-#define APP_BUFFER_SIZE 512
+#define APP_BUFFER_SIZE 1024
 static struct mqtt_connection conn;
 static char app_buffer[APP_BUFFER_SIZE];
 /*---------------------------------------------------------------------------*/
@@ -151,6 +154,7 @@ static struct etimer publish_periodic_timer;
 static struct ctimer ct;
 static char *buf_ptr;
 static uint16_t seq_nr_value = 0;
+
 /*---------------------------------------------------------------------------*/
 static uip_ip6addr_t def_route;
 /*---------------------------------------------------------------------------*/
@@ -164,6 +168,7 @@ extern int def_rt_rssi;
 static alstom_mqtt_iot_sensor_reading_t *reading;
 /*---------------------------------------------------------------------------*/
 mqtt_client_config_t *conf;
+mqtt_client_config_t config_k;
 /*---------------------------------------------------------------------------*/
 /* 
  * Bandera que indica el topic al que debe subscribirse el dispositivo. Es 
@@ -171,6 +176,19 @@ mqtt_client_config_t *conf;
  * reiniciada cuando se ha de actualizar la configuración (update_conf).
 */
 int flag_sub_topic = 0;
+
+/*---------------------------------------------------------------------------*/
+/*
+* Inicialización de la estructura de configuracion MQTT.
+
+#define MQTT_CONFIG(name,broker_ip) \
+  mqtt_client_config_t *name = \
+  { ALSTOM_MQTT_IOT_DEFAULT_USERNAME_ID, ALSTOM_MQTT_IOT_DEFAULT_AUTH_TOKEN, ALSTOM_MQTT_IOT_DEFAULT_EVENT_TYPE_ID, \
+    broker_ip,ALSTOM_MQTT_IOT_DEFAULT_SUBSCRIBE_CMD_TYPE, ALSTOM_MQTT_IOT_DEFAULT_SALA, ALSTOM_MQTT_IOT_DEFAULT_MATERIAL,\
+    ALSTOM_MQTT_IOT_DEFAULT_PUBLISH_INTERVAL, ALSTOM_MQTT_IOT_DEFAULT_BROKER_PORT}
+
+MQTT_CONFIG(conf,"0000:0000:0000:0000:0000:ffff:c0a8:012f");
+*/
 /*---------------------------------------------------------------------------*/
 PROCESS(mqtt_client_process, "CC26XX MQTT Client");
 /*---------------------------------------------------------------------------*/
@@ -178,6 +196,74 @@ static void
 publish_led_off(void *d)                                                                  //APAGA EL LED
 {
   leds_off(ALSTOM_MQTT_IOT_STATUS_LED);
+}
+/*---------------------------------------------------------------------------*/
+static void
+load_mqtt_config()
+{
+  /* Read from flash into a temp buffer */
+  mqtt_client_config_t tmp_cfg;
+  printf("Cargando configuracion de la memoria Flash\n");
+  int rv = ext_flash_open();
+  int i;
+
+  if(!rv) {
+    printf("Could not open flash to load config\n");
+    ext_flash_close();
+    return;
+  }
+
+  rv = ext_flash_read(CONFIG_FLASH_OFFSET+sizeof(alstom_mqtt_iot_config),sizeof(mqtt_client_config_t),(uint8_t *)&tmp_cfg);
+
+  ext_flash_close();
+
+  if(!rv) {
+    printf("Error loading config\n");
+    return;
+  }
+  if(tmp_cfg.magic == CONFIG_MAGIC && tmp_cfg.len == sizeof(tmp_cfg)) {
+    memcpy(&config_k, &tmp_cfg, sizeof(mqtt_client_config_t));
+    printf("Variable temporal copiada config_k, coincide len y MAGIC\n");
+  }else{
+    return;
+  }
+  for(i=0;i<strlen(conf->material);i++){
+      conf->material[i]=config_k.material[i];
+    }
+}
+/*---------------------------------------------------------------------------*/
+void
+save_mqtt_config()
+{
+  /* Dump current running config to flash */
+  int rv;
+  int i;
+  rv = ext_flash_open();
+
+  if(!rv) {
+    printf("Could not open flash to save config\n");
+    ext_flash_close();
+    return;
+  }
+
+  rv = ext_flash_erase(CONFIG_FLASH_OFFSET + sizeof(alstom_mqtt_iot_config_t),sizeof(mqtt_client_config_t));
+
+  if(!rv) {
+    printf("Error erasing flash\n");
+  } else {
+    config_k.magic = CONFIG_MAGIC;
+    config_k.len = sizeof(mqtt_client_config_t);
+    for(i=0;i<strlen(conf->material);i++){
+      config_k.material[i] = conf->material[i];
+    }
+    rv = ext_flash_write(CONFIG_FLASH_OFFSET + sizeof(alstom_mqtt_iot_config_t),sizeof(mqtt_client_config_t),(uint8_t *)&config_k);
+    if(!rv) {
+      printf("Error saving config\n");
+    }
+  }
+
+  ext_flash_close();
+
 }
 /*---------------------------------------------------------------------------*/
 /*
@@ -269,6 +355,7 @@ pub_handler_ConfA(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   	   for(i=0;i<chunk_len;i++){
   		    conf->material[i] = chunk[i];
   	   }
+       save_mqtt_config();
   	   state = MQTT_CLIENT_STATE_NEWCONFIG;
        mqtt_disconnect(&conn);
   	   return;
@@ -350,6 +437,7 @@ pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
             init_sensor_readings();
             DBG("Activada publicación de %s\n",reading->form_field);
             save_config();
+            process_poll(&mqtt_client_process);
             return;
           }
         }   
@@ -362,6 +450,8 @@ pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
           reading->interval = atoi((const char*)chunk);
           DBG("Modificado Intervalo de %s. Nuevo intervalo:%lu\n",reading->form_field,reading->interval);
           init_sensor_readings();
+          save_config();
+          process_poll(&mqtt_client_process);
           return;
         }   
       }
@@ -371,8 +461,28 @@ pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
      for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
         if(strncmp(&topic[topic_len - 4 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
           reading->limit = atoi((const char*)chunk);
+          save_config();
           DBG("Modificado Límite de %s. Nuevo Límite:%lu\n",reading->form_field,reading->interval);
           return;
+        }   
+      }
+      return;
+  }
+  if(strncmp(&topic[topic_len - 5],"LimOn",5) == 0){
+     for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
+        if(strncmp(&topic[topic_len - 4 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
+          if(chunk[0] == '0') {
+            reading->limitOn = 0;
+            DBG("Desactivada Alarma de límite en publicación de %s\n",reading->form_field);
+            save_config();
+            return;
+          } else if(chunk[0] == '1') {
+            reading->limitOn = 1;
+            init_sensor_readings();
+            DBG("Activada Alarma de límite en publicación de %s\n",reading->form_field);
+            save_config();
+            return;
+          }
         }   
       }
       return;
@@ -437,7 +547,7 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
     /*
     * Topics de configuracion de publicación de datos de sensores. Longitud Variable
     */
-    if(strlen(msg_ptr->topic) > 23){
+    if(strlen(msg_ptr->topic) > 27){
       pub_handler_ConfP(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
                 msg_ptr->payload_length);
     }
@@ -625,9 +735,8 @@ update_config(void)
 static int
 init_config()
 {
-  /* Populate configuration with default values */
   memset(conf, 0, sizeof(mqtt_client_config_t));
-  /*Eliminado la copia de Org_ID y Type_ID ya que client_ID no se forma con ellos*/
+
   memcpy(conf->event_type_id, ALSTOM_MQTT_IOT_DEFAULT_EVENT_TYPE_ID, 7);
   memcpy(conf->broker_ip, broker_ip, strlen(broker_ip));
   memcpy(conf->cmd_type, ALSTOM_MQTT_IOT_DEFAULT_SUBSCRIBE_CMD_TYPE, 1);
@@ -640,6 +749,7 @@ init_config()
 
   return 1;
 }
+
 
 /*---------------------------------------------------------------------------*/
 /*
@@ -715,7 +825,7 @@ publish(void)
                  "\"myName\":\"%s\","
                  "\"Seq #\":%d,"
                  "\"Uptime (sec)\":%lu",
-                 BOARD_STRING, seq_nr_value, clock_seconds());                                      //GUARDA EN BUFFER LOS DATOS DEL SENSORTAG
+                 client_id, seq_nr_value, clock_seconds());                                      //GUARDA EN BUFFER LOS DATOS DEL SENSORTAG
 
   if(len < 0 || len >= remaining) {
     printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
@@ -795,7 +905,7 @@ publish_info(void)
                  "\"myName\":\"%s\","
                  "\"Seq #\":%d,"
                  "\"Uptime (sec)\":%lu",
-                 BOARD_STRING, seq_nr_value, clock_seconds());                                      //GUARDA EN BUFFER LOS DATOS DEL SENSORTAG
+                 client_id, seq_nr_value, clock_seconds());                                      //GUARDA EN BUFFER LOS DATOS DEL SENSORTAG
 
   if(len < 0 || len >= remaining) {
     printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
@@ -822,12 +932,30 @@ publish_info(void)
 
   memcpy(&def_route, uip_ds6_defrt_choose(), sizeof(uip_ip6addr_t));
 
+  len = snprintf(buf_ptr, remaining, ",\"Material\":\"%s",conf->material);
+
+  if(len < 0 || len >= remaining) {
+    printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
+    return;
+  }
+  remaining -= len;
+  buf_ptr += len;
+
   for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
-    len = snprintf(buf_ptr, remaining, ",\"%s\":{\"Publish\":%d,\"Interval\":%lu,\"Limit\":%lu}",reading->form_field, reading->publish,reading->interval,reading->limit);
+    len = snprintf(buf_ptr, remaining, ",\"%s\":{"
+                                        "\"Publish\":%d,"
+                                        "\"Interval\":%lu,"
+                                        "\"LimitOn\":%d"
+                                        "\"Limit\":%lu"
+                                        "}",
+                                        reading->form_field, reading->publish,reading->interval,reading->limitOn,reading->limit);
+    printf("Sensor añadido al mensaje de informacion: %d\n",reading->type);
     if(len < 0 || len >= remaining) {
       printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
       return;
     }
+    remaining -= len;
+    buf_ptr += len;
   }
 
   len = snprintf(buf_ptr, remaining, "}}");
@@ -865,7 +993,7 @@ alarm(uint8_t type)
                  "\"myName\":\"%s\","
                  "\"Seq #\":%d,"
                  "\"Uptime (sec)\":%lu",
-                 BOARD_STRING, seq_nr_value, clock_seconds());                                      //GUARDA EN BUFFER LOS DATOS DEL SENSORTAG
+                 client_id, seq_nr_value, clock_seconds());                                      //GUARDA EN BUFFER LOS DATOS DEL SENSORTAG
 
   if(len < 0 || len >= remaining) {
     printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
@@ -1074,15 +1202,16 @@ state_machine(void)
         */
         if(alarmOn != 10){
           leds_on(ALSTOM_MQTT_IOT_STATUS_LED);                                  //Enciende LED verde
-          ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL);
-          alarmOn = 10; 
+          ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL); 
           alarm(alarmOn);
-          DBG("Publicando alarma %d\n",alarmOn); 
+          DBG("Publicando alarma %d\n",alarmOn);
+          alarmOn = 10; 
         }else if(Info==1){
           leds_on(ALSTOM_MQTT_IOT_STATUS_LED);                                  //Enciende LED verde
           ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL);
-          Info=0;
           publish_info();
+          DBG("Publicado topic de informacion %d\n",Info);
+          Info=0;
         }else{
           leds_on(ALSTOM_MQTT_IOT_STATUS_LED);                                  //Enciende LED verde
           ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL);
@@ -1193,6 +1322,8 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
     PROCESS_EXIT();
   }
 
+  load_mqtt_config();
+
   update_config();                                    //Actualiza, cargando el cliente_ID y los topics de subscripcion y publicacion 
 
   /* Main loop */
@@ -1218,10 +1349,9 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
     *Si llega un evento de publicación con datos del sensor que ha superado un valor límite.
     */
     if(ev == alstom_mqtt_iot_publish_event && data != NULL){
-        alarmOnp=data;
-        alarmOn=*alarmOnp;
-        state_machine();
-      
+      alarmOnp=data;
+      alarmOn=*alarmOnp;
+      state_machine();
     }
     /*Si salta evento de carga de configuracion por defecto*/
     if(ev == alstom_mqtt_iot_load_config_defaults) {

@@ -65,7 +65,11 @@ typedef struct mqtt_client_config {
   char material[MQTT_CLIENT_CONFIG_MATERIAL_LEN];
   clock_time_t pub_interval;
   uint16_t broker_port;
+  uint32_t magic;
+  int len;
 } mqtt_client_config_t;
+
+extern mqtt_client_config_t config_k;
 /*---------------------------------------------------------------------------*/
 #endif /* MQTT_CLIENT_H_ */
 /*---------------------------------------------------------------------------*/

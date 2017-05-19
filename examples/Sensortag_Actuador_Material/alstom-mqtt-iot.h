@@ -117,7 +117,7 @@ extern process_event_t alstom_mqtt_iot_load_config_defaults;
 #define ALSTOM_MQTT_IOT_UNIT_TEMP     "C"
 #define ALSTOM_MQTT_IOT_UNIT_VOLT     "mV"
 #define ALSTOM_MQTT_IOT_UNIT_PRES     "hPa"
-#define ALSTOM_MQTT_IOT_UNIT_HUMIDITY "RH"   //%
+#define ALSTOM_MQTT_IOT_UNIT_HUMIDITY "RH"   
 #define ALSTOM_MQTT_IOT_UNIT_LIGHT    "lux"
 /*---------------------------------------------------------------------------*/
 /* A data type for sensor readings, internally stored in a linked list */
@@ -139,6 +139,8 @@ typedef struct alstom_mqtt_iot_sensor_reading {
   uint8_t changed;                                    // 1-> Se ha obtenido una nueva medida del sensor
   uint32_t interval;                                  // Número de segundos entre lecturas del sensor.
   uint32_t limit;                                     // Límite, si se sobrepasa se envía una alarma a la nube.
+  uint8_t limitOn;                                    //Activación de la función alarma de limite
+  
   char converted[ALSTOM_MQTT_IOT_CONVERTED_LEN];      // Lectura convertida a string para ser enviada al broker.
 } alstom_mqtt_iot_sensor_reading_t;
 /*---------------------------------------------------------------------------*/
@@ -153,6 +155,7 @@ typedef struct alstom_mqtt_iot_config_s {
                                                   //en ese array la determina la propiedad type.
   uint32_t sensors_intervals[9];                  //Intervalos de medida de los sensores.
   uint16_t sensors_limits[9];                     //Limites de los sensores 
+  uint32_t limits_bitmap;
   int def_rt_ping_interval;
   mqtt_client_config_t mqtt_config;
 } alstom_mqtt_iot_config_t;
