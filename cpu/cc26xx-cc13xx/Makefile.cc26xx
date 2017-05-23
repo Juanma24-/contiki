@@ -1,9 +1,4 @@
 TI_XXWARE_PATH = lib/cc26xxware
 TI_DRIVERS_PATH = lib/tidrivers_cc13xx_cc26xx_2_21_00_04/packages/
-TI_BIOS_PATH = lib/bios_6_46_01_37/packages
-TI_UIA_PATH = lib/uia_2_01_00_01/packages
-TI_XDC_PATH = lib/
-
- xdc_target_types__=$(TI_BIOS_PATH)/gnu/targets/arm/std.h
 
 include $(CONTIKI_CPU)/Makefile.cc26xx-cc13xx

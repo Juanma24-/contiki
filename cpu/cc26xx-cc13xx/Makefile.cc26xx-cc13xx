@@ -11,9 +11,6 @@ SREC_CAT = srec_cat
 CPU_ABS_PATH       = cpu/cc26xx-cc13xx
 TI_XXWARE = $(CONTIKI_CPU)/$(TI_XXWARE_PATH)
 TI_DRIVERS = $(CONTIKI_CPU)/$(TI_DRIVERS_PATH)
-TI_BIOS = $(CONTIKI_CPU)/$(TI_BIOS_PATH)
-TI_UIA = $(CONTIKI_CPU)/$(TI_UIA_PATH)
-TI_XDC = $(CONTIKI_CPU)/$(TI_XDC_PATH)
 
 ### cc26xxware sources under driverlib will be added to the MODULES list
 TI_XXWARE_SRC = $(CPU_ABS_PATH)/$(TI_XXWARE_PATH)/driverlib
@@ -30,9 +27,6 @@ TI_XXWARE_STARTUP_SRCS = ccfg.c startup_gcc.c
 CFLAGS += -I$(TI_XXWARE) -I$(CONTIKI)/$(TI_XXWARE_SRC)
 CFLAGS += -I$(TI_XXWARE)/inc
 CFLAGS += -I$(TI_DRIVERS)
-CFLAGS += -I$(TI_BIOS)
-CFLAGS += -I$(TI_UIA)
-CFLAGS += -I$(TI_XDC)
 MODULES += $(TI_XXWARE_SRC)
 
 LDSCRIPT = $(CONTIKI_CPU)/cc26xx.ld
