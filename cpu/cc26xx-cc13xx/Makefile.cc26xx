@@ -1,4 +1,3 @@
 TI_XXWARE_PATH = lib/cc26xxware
-TI_DRIVERS_PATH = lib/tidrivers_cc13xx_cc26xx_2_21_00_04/packages/
 
 include $(CONTIKI_CPU)/Makefile.cc26xx-cc13xx

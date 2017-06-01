@@ -48,7 +48,6 @@
 #include "batmon-sensor.h"
 #include "alstom-mqtt-iot.h"
 #include "mqtt-client.h"
-//#include "ti/mw/lcd/LCDDogm1286.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -329,6 +328,8 @@ get_batmon_reading(void *data)
     if(value != CC26XX_SENSOR_READING_ERROR) {
       batmon_temp_reading.raw = value;
 
+      compare_and_update(&batmon_temp_reading);
+
       buf = batmon_temp_reading.converted;
       memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
       snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d", value);
@@ -347,6 +348,7 @@ get_batmon_reading(void *data)
     if(value != CC26XX_SENSOR_READING_ERROR) {
       batmon_volt_reading.raw = value;
       
+      compare_and_update(&batmon_volt_reading);
 
       buf = batmon_volt_reading.converted;
       memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);

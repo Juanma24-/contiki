@@ -143,6 +143,11 @@ set_rf_params(void)
 int
 main(void)
 {
+  #if OTA
+  //  OTA firmware VTOR table address must be specified, it is not 0x00000000.
+  HWREG(NVIC_VTABLE) = OTA_IMAGE_OFFSET + OTA_METADATA_SPACE;
+  #endif
+
   /* Enable flash cache and prefetch. */
   ti_lib_vims_mode_set(VIMS_BASE, VIMS_MODE_ENABLED);
   ti_lib_vims_configure(VIMS_BASE, true, true);

@@ -462,7 +462,7 @@ pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
         if(strncmp(&topic[topic_len - 4 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
           reading->limit = atoi((const char*)chunk);
           save_config();
-          DBG("Modificado Límite de %s. Nuevo Límite:%lu\n",reading->form_field,reading->interval);
+          DBG("Modificado Límite de %s. Nuevo Límite:%lu\n",reading->form_field,reading->limit);
           return;
         }   
       }
@@ -470,7 +470,7 @@ pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   }
   if(strncmp(&topic[topic_len - 5],"LimOn",5) == 0){
      for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
-        if(strncmp(&topic[topic_len - 4 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
+        if(strncmp(&topic[topic_len - 6 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
           if(chunk[0] == '0') {
             reading->limitOn = 0;
             DBG("Desactivada Alarma de límite en publicación de %s\n",reading->form_field);
@@ -932,7 +932,7 @@ publish_info(void)
 
   memcpy(&def_route, uip_ds6_defrt_choose(), sizeof(uip_ip6addr_t));
 
-  len = snprintf(buf_ptr, remaining, ",\"Material\":\"%s",conf->material);
+  len = snprintf(buf_ptr, remaining, ",\"Material\":\"%s\"",conf->material);
 
   if(len < 0 || len >= remaining) {
     printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
@@ -945,10 +945,10 @@ publish_info(void)
     len = snprintf(buf_ptr, remaining, ",\"%s\":{"
                                         "\"Publish\":%d,"
                                         "\"Interval\":%lu,"
-                                        "\"LimitOn\":%d"
+                                        "\"LimitOn\":%d,"
                                         "\"Limit\":%lu"
                                         "}",
-                                        reading->form_field, reading->publish,reading->interval,reading->limitOn,reading->limit);
+                                        reading->descr, reading->publish,reading->interval,reading->limitOn,reading->limit);
     printf("Sensor añadido al mensaje de informacion: %d\n",reading->type);
     if(len < 0 || len >= remaining) {
       printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
@@ -1022,49 +1022,49 @@ alarm(uint8_t type)
 
   switch(type){
     case 0:{
-      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Batmon Temp: Se ha superado el valor limite");
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Batmon Temp: Se ha superado el valor limite\"");
       break;
     }
     case 1:{
-      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Batmon Volt: Se ha superado el valor limite");
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Batmon Volt: Se ha superado el valor limite\"");
       break;
     }
     case 2:{
-      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Bmp Pres: Se ha superado el valor limite");
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Bmp Pres: Se ha superado el valor limite\"");
       break;    
     }
     case 3:{
-      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Bmp Temp: Se ha superado el valor limite");
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Bmp Temp: Se ha superado el valor limite\"");
       break;
     }
     case 4:{
-      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Tmp Ambient: Se ha superado el valor limite");
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Tmp Ambient: Se ha superado el valor limite\"");
       break;
     }
     case 5:{
-      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Tmp Object: Se ha superado el valor limite");
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Tmp Object: Se ha superado el valor limite\"");
       break;
     }
     case 6:{
-      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Hdc Temp: Se ha superado el valor limite");
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Hdc Temp: Se ha superado el valor limite\"");
       break;
     }
     case 7:{
-      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Hdc Humidity: Se ha superado el valor limite");
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Hdc Humidity: Se ha superado el valor limite\"");
       break;
     }
     case 8:{
-      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Opt Light: Se ha superado el valor limite");
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Opt Light: Se ha superado el valor limite\"");
       break;
     }
     case 9:{
-      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Button:Se_ha_pulsado_el_boton");
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Button:Se_ha_pulsado_el_boton\"");
       DBG("Añadido a buffer, boton pulsado\n");
       break;
     }
 
     default:{
-      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"No se ha podido determianr motivo");
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"No se ha podido determianr motivo\"");
       break;
     }
   }
