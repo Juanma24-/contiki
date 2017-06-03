@@ -33,3 +33,11 @@ Para compilar el firmware realizado para Sensortag hay que situarse en la carpet
 make *firmware* TARGET=srf06-cc26xx BOARD=sensortag/cc2650 CPU_FAMILY=cc26xx
 ~~~
 Sustituyendo la palabra _firmware_ por el nombre del archivo base del firmware.
+
+FLASH SENSORTAG
+===============
+
+Para grabar el archivo compilado en el Sensortag se hace uso de la herramienta [http://processors.wiki.ti.com/index.php/Category:CCS_UniFlash](UniFlash). Una vez abierta se selecciona el dispositivo _CC2650F128_ y la conexión _XDX110 USB Debug Probe_ .  
+Los pasos para realizar cargar el firmware son:  
+1- Borrar la memoria Flash: Settings & Utilities -> Erase Entire Flash  
+2- Cargar la nueva imagen: Program -> Browse -> Selecciona archivo .hex a cargar -> Load Image
