@@ -27,48 +27,52 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-/*---------------------------------------------------------------------------*/
-#ifndef PROJECT_CONF_H_
-#define PROJECT_CONF_H_
-/*---------------------------------------------------------------------------*/
-/* Change to match your configuration */
-#define IEEE802154_CONF_PANID            0xABCD
-#define RF_CORE_CONF_CHANNEL                 25
-#define RF_BLE_CONF_ENABLED                   0
-/*---------------------------------------------------------------------------*/
-/* Enable the ROM bootloader */
-#define ROM_BOOTLOADER_ENABLE                 1
-#define BUTTON_SENSOR_CONF_ENABLE_SHUTDOWN    1
-/*---------------------------------------------------------------------------*/
-/*
- * Shrink the size of the uIP buffer, routing table and ND cache.
- * Set the TCP MSS
+/**
+ * \addtogroup cc26xx-web-demo
+ * @{
+ *
+ * \file
+ *     Header file for the CC26xx web demo MQTT client functionality
  */
-#define UIP_CONF_BUFFER_SIZE                900
-#define NBR_TABLE_CONF_MAX_NEIGHBORS          5
-#define UIP_CONF_MAX_ROUTES                   5
-#define UIP_CONF_TCP_MSS                    128
 /*---------------------------------------------------------------------------*/
-/*Activación de noncoredriver como capa de seguridad*/	
-#undef LLSEC802154_CONF_ENABLED
-#define LLSEC802154_CONF_ENABLED          1
-#undef NETSTACK_CONF_FRAMER
-#define NETSTACK_CONF_FRAMER              noncoresec_framer
-#undef NETSTACK_CONF_LLSEC
-#define NETSTACK_CONF_LLSEC               noncoresec_driver
-#undef NONCORESEC_CONF_SEC_LVL
-#define NONCORESEC_CONF_SEC_LVL           1
-#define NONCORESEC_CONF_KEY { 0x00 , 0x01 , 0x02 , 0x03 , \
-                              0x04 , 0x05 , 0x06 , 0x07 , \
-                              0x08 , 0x09 , 0x0A , 0x0B , \
-                              0x0C , 0x0D , 0x0E , 0x0F } 
-                              
-/*Activacion de LLSEC802145 como capa de seguridad
-#undef LLSEC802154_CONF_ENABLED
-#define LLSEC802154_CONF_ENABLED          1
-#undef NETSTACK_CONF_LLSEC
-#define NETSTACK_CONF_LLSEC               llsec802154_driver
-*/
+#ifndef MQTT_CLIENT_H_
+#define MQTT_CLIENT_H_
 /*---------------------------------------------------------------------------*/
-#endif /* PROJECT_CONF_H_ */
+#define MQTT_CLIENT_CONFIG_USER_ID_LEN 		   	32
+#define MQTT_CLIENT_CONFIG_AUTH_TOKEN_LEN    	32
+#define MQTT_CLIENT_CONFIG_EVENT_TYPE_ID_LEN 	32
+#define MQTT_CLIENT_CONFIG_SALA			      	4
+#define MQTT_CLIENT_CONFIG_MATERIAL_NUM		  	4
+#define MQTT_CLIENT_CONFIG_MATERIAL_LEN        	6
+#define MQTT_CLIENT_CONFIG_CMD_TYPE_LEN       	8
+#define MQTT_CLIENT_CONFIG_IP_ADDR_STR_LEN   	64
 /*---------------------------------------------------------------------------*/
+#define MQTT_CLIENT_PUBLISH_INTERVAL_MAX      86400 /* secs: 1 day */
+#define MQTT_CLIENT_PUBLISH_INTERVAL_MIN          5 /* secs */
+/*---------------------------------------------------------------------------*/
+PROCESS_NAME(mqtt_client_process);
+/*---------------------------------------------------------------------------*/
+/**
+ * \brief Data structure declaration for the MQTT client configuration
+ */
+typedef struct mqtt_client_config {
+  char user_id[MQTT_CLIENT_CONFIG_USER_ID_LEN];
+  char auth_token[MQTT_CLIENT_CONFIG_AUTH_TOKEN_LEN];
+  char event_type_id[MQTT_CLIENT_CONFIG_EVENT_TYPE_ID_LEN];
+  char broker_ip[MQTT_CLIENT_CONFIG_IP_ADDR_STR_LEN];
+  char cmd_type[MQTT_CLIENT_CONFIG_CMD_TYPE_LEN];
+  char sala[MQTT_CLIENT_CONFIG_SALA];
+  char material[MQTT_CLIENT_CONFIG_MATERIAL_LEN];
+  clock_time_t pub_interval;
+  uint16_t broker_port;
+  uint32_t magic;
+  int len;
+} mqtt_client_config_t;
+
+extern mqtt_client_config_t config_k;
+/*---------------------------------------------------------------------------*/
+#endif /* MQTT_CLIENT_H_ */
+/*---------------------------------------------------------------------------*/
+/**
+ * @}
+ */

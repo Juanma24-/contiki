@@ -59,15 +59,12 @@
 #include <driverlib/gpio.h>
 #include "clock.h"
 #include <common/board-spi.h>
-#include <dev/leds.h>
 
 #include "SharpGrLib.h"
 #include <string.h>
 #include <strings.h>
 #include "stdio.h"
 
-//#define DELAY_MS(i)    Task_sleep(((i) * 1000) / Clock_tickPeriod)
-//#define DELAY_US(i)    Task_sleep(((i) * 1) / Clock_tickPeriod)
 #define DELAY_MS(i)    clock_delay_usec(i*1000)
 #define DELAY_US(i)    clock_delay_usec(i)
 
@@ -469,15 +466,11 @@ static void SharpGrLib_flush(tDisplay *pDisplay)
     //COM inversion bit
     command = command ^ VCOMbit;
 
-    //PIN_setOutputValue(pinHandle, csPinId, 1);
     GPIO_writeDio(csPinId, 1);
     DELAY_US(100);
 
 
-    bool trans=board_spi_write(&command, sizeof(command));
-    if (trans==false){
-        leds_on(LEDS_RED);
-    }
+    board_spi_write(&command, sizeof(command));
     
     flagSendToggleVCOMCommand = SHARP_SKIP_TOGGLE_VCOM_COMMAND;
 
@@ -486,28 +479,16 @@ static void SharpGrLib_flush(tDisplay *pDisplay)
     {
         command = reverse(xj + 1);
 
-        trans = board_spi_write(&command, sizeof(command));
-        if (trans==false){
-            leds_on(LEDS_RED);
-            return;
-        }
+        board_spi_write(&command, sizeof(command));
         
-        trans = board_spi_write(pucData, (pDisplay->usWidth >> 3));
-        if (trans==false){
-            leds_on(LEDS_RED);
-            return;
-        }
+        board_spi_write(pucData, (pDisplay->usWidth >> 3));
         
         pucData += (pDisplay->usWidth >> 3);
 
 
         command = SHARP_LCD_TRAILER_BYTE;
 
-        trans = board_spi_write(&command, sizeof(command));
-        if (trans==false){
-            leds_on(LEDS_RED);
-            return;
-        }
+        board_spi_write(&command, sizeof(command));
         
     }
 #endif
@@ -533,11 +514,7 @@ static void SharpGrLib_flush(tDisplay *pDisplay)
 
     command        = SHARP_LCD_TRAILER_BYTE;
 
-    trans = board_spi_write(&command, sizeof(command));
-    if (trans==false){
-        leds_on(LEDS_RED);
-        return;
-    }
+    board_spi_write(&command, sizeof(command));
 
 
     // Wait for last byte to be sent, then drop SCS
@@ -574,21 +551,13 @@ static void SharpGrLib_clearScreen(tDisplay *pDisplay, uint16_t ulValue)
     GPIO_writeDio(csPinId, 1);
     DELAY_US(100);
 
-    bool trans = board_spi_write(&command, sizeof(command));
-    if (trans==false){
-        leds_on(LEDS_RED);
-        return;
-    }
+    board_spi_write(&command, sizeof(command));
 
     flagSendToggleVCOMCommand = SHARP_SKIP_TOGGLE_VCOM_COMMAND;
     command = SHARP_LCD_TRAILER_BYTE;
 
-    trans = board_spi_write(&command, sizeof(command));
-    if (trans==false){
-        leds_on(LEDS_RED);
-        return;
-    }
-
+    board_spi_write(&command, sizeof(command));
+    
     DELAY_US(100);
     GPIO_writeDio(csPinId, 0);
 
@@ -624,17 +593,9 @@ void SharpGrLib_sendToggleVCOMCommand()
         GPIO_writeDio(csPinId, 1);
         DELAY_US(100);
 
-        bool trans = board_spi_write(&command[0], sizeof(command[0]));
-        if (trans==false){
-            leds_on(LEDS_RED);
-            return;
-        }
+        board_spi_write(&command[0], sizeof(command[0]));
         
-        trans = board_spi_write(&command[1], sizeof(command[1]));
-        if (trans==false){
-            leds_on(LEDS_RED);
-            return;
-        }
+        board_spi_write(&command[1], sizeof(command[1]));
         
         // Wait for last byte to be sent, then drop SCS
 

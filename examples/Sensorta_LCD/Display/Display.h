@@ -600,6 +600,14 @@ void  Display_doClose(Display_Handle handle);
  *          unsuccessful operations.
  */
 void  Display_doControl(Display_Handle handle, unsigned int cmd, void *arg);
+
+/*!
+ *  @brief Calcula la siguiente a escribir tras mandar un string a pantalla
+ *
+ *
+ */
+uint8_t Display_move(Display_Handle handle, char* string, uint8_t line);
+
 #ifdef __cplusplus
 }
 #endif

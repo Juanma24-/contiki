@@ -81,13 +81,13 @@
 
 #include "board-peripherals.h"
 #include "dev/leds.h"
+#include <stdio.h>
 
 #include "ti-lib.h"
-
-#include <stdio.h>
 #include <stdint.h>
 #include <Display/Display.h>
 #include <Display/DisplayExt.h>
+
 /* Example GrLib image */
 #include "splash_image.h"
 /*---------------------------------------------------------------------------*/

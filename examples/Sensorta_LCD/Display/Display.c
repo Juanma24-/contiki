@@ -40,19 +40,24 @@
 #include <stdio.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 #include <board.h>
+#include <leds.h>
 
 /* -----------------------------------------------------------------------------
  *  Externs
  * -----------------------------------------------------------------------------
  */
 #define BOARD_DISPLAY_SHARP_SIZE    96 // 96->96x96 is the most common board, alternative is 128->128x128.
+
 DisplaySharp_Object displaySharpObject;
+
 static uint8_t sharpDisplayBuf[BOARD_DISPLAY_SHARP_SIZE * BOARD_DISPLAY_SHARP_SIZE / 8];
+
 const DisplaySharp_HWAttrs displaySharpHWattrs = {
-    .csPin       = BOARD_IOID_FLASH_CS,
+    .csPin       = BOARD_IOID_DEVPACK_CS,
     .extcominPin = BOARD_IOID_DEVPK_LCD_EXTCOMIN,
-    .powerPin    = 0xFF,
+    .powerPin    = 0xFE,
     .enablePin   = BOARD_IOID_DEVPK_LCD_ENABLE,
     .pixelWidth  = BOARD_DISPLAY_SHARP_SIZE,
     .pixelHeight = BOARD_DISPLAY_SHARP_SIZE,
@@ -86,6 +91,7 @@ const Display_Params Display_defaultParams = {
     DISPLAY_CLEAR_BOTH,   /* Clear entire line before writing */
 };
 
+
 /* -----------------------------------------------------------------------------
  *                                          Functions
  * -----------------------------------------------------------------------------
@@ -109,7 +115,7 @@ Display_Handle Display_doOpen(uint32_t id, Display_Params *params)
         handle = (Display_Handle)&Display_config[i];
 
         /* Open if id matches, or if meta-type matches */
-        if (id == i || (handle->fxnTablePtr->getTypeFxn() & id))
+        if ((handle->fxnTablePtr->getTypeFxn() & id))
         {
             if (NULL == handle->fxnTablePtr->openFxn(handle, params))
             {
@@ -125,6 +131,7 @@ Display_Handle Display_doOpen(uint32_t id, Display_Params *params)
         }
     }
     // Couldn't open.
+    leds_on(LEDS_RED);
     printf("Couldn't open selected Displays\n");
     return NULL;
 }
@@ -145,6 +152,7 @@ void Display_doClear(Display_Handle handle)
 {
     if (NULL == handle)
     {
+        leds_on(LEDS_RED);
         printf("Trying to use NULL-handle.\n");
         return;
     }
@@ -160,6 +168,7 @@ void Display_doClearLines(Display_Handle handle, uint8_t fromLine, uint8_t toLin
 {
     if (NULL == handle)
     {
+        leds_on(LEDS_RED);
         printf("Trying to use NULL-handle.\n");
         return;
     }
@@ -192,6 +201,7 @@ void  Display_doControl(Display_Handle handle, unsigned int cmd, void *arg)
 {
     if (NULL == handle)
     {
+        leds_on(LEDS_RED);
         printf("Trying to use NULL-handle.\n");
         return;
     }
@@ -206,9 +216,31 @@ void Display_doClose(Display_Handle handle)
 {
     if (NULL == handle)
     {
+        leds_on(LEDS_RED);
         printf("Trying to use NULL-handle.\n");
         return;
     }
 
     handle->fxnTablePtr->closeFxn(handle);
+}
+/*
+ *  ======= Display_move =======
+ */
+uint8_t Display_move(Display_Handle handle, char* string, uint8_t line)
+{
+    if(NULL == string){
+        return line;
+    }
+    
+    uint8_t offset = strlen(string)/16 + 1;
+    line += offset;
+
+    if(line>11){
+        Display_clear(handle);
+        return 0;
+    }else{
+        return line;
+    }
+    
+    
 }

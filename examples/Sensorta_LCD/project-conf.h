@@ -39,6 +39,9 @@
 /* Enable the ROM bootloader */
 #define ROM_BOOTLOADER_ENABLE                 1
 #define BUTTON_SENSOR_CONF_ENABLE_SHUTDOWN    1
+
+/* Si hay pantalla para visualizar los datos, se apaga la interfaz UART*/
+#define CC26XX_UART_CONF_ENABLE				  0
 /*---------------------------------------------------------------------------*/
 /*
  * Shrink the size of the uIP buffer, routing table and ND cache.
@@ -49,26 +52,7 @@
 #define UIP_CONF_MAX_ROUTES                   5
 #define UIP_CONF_TCP_MSS                    128
 /*---------------------------------------------------------------------------*/
-/*Activación de noncoredriver como capa de seguridad*/	
-#undef LLSEC802154_CONF_ENABLED
-#define LLSEC802154_CONF_ENABLED          1
-#undef NETSTACK_CONF_FRAMER
-#define NETSTACK_CONF_FRAMER              noncoresec_framer
-#undef NETSTACK_CONF_LLSEC
-#define NETSTACK_CONF_LLSEC               noncoresec_driver
-#undef NONCORESEC_CONF_SEC_LVL
-#define NONCORESEC_CONF_SEC_LVL           1
-#define NONCORESEC_CONF_KEY { 0x00 , 0x01 , 0x02 , 0x03 , \
-                              0x04 , 0x05 , 0x06 , 0x07 , \
-                              0x08 , 0x09 , 0x0A , 0x0B , \
-                              0x0C , 0x0D , 0x0E , 0x0F } 
-                              
-/*Activacion de LLSEC802145 como capa de seguridad
-#undef LLSEC802154_CONF_ENABLED
-#define LLSEC802154_CONF_ENABLED          1
-#undef NETSTACK_CONF_LLSEC
-#define NETSTACK_CONF_LLSEC               llsec802154_driver
-*/
+
 /*---------------------------------------------------------------------------*/
 #endif /* PROJECT_CONF_H_ */
 /*---------------------------------------------------------------------------*/

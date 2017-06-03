@@ -35,7 +35,6 @@
  * ------------------------------------------------------------------------------
  */
 // TI RTOS drivers
-//#include "pt-sem.h"
 #include <driverlib/ioc.h>
 #include <driverlib/gpio.h>
 #include <common/board-spi.h>
@@ -45,6 +44,9 @@
 #include <Display/DisplaySharp.h>
 #include <Display/SharpGrLib.h>
 #include <board.h>
+#include <string.h>
+#include <stdio.h>
+
 
 /* -----------------------------------------------------------------------------
  *  Constants and macros
@@ -64,13 +66,13 @@
  *   Type definitions
  * ------------------------------------------------------------------------------
  */
-#define IOC_LCD_OUTPUT_0          (IOC_CURRENT_2MA | IOC_STRENGTH_MAX |      \
+#define IOC_LCD_OUTPUT_0          (IOC_CURRENT_4MA | IOC_STRENGTH_MAX |      \
                                  IOC_IOPULL_DOWN | IOC_SLEW_DISABLE |         \
                                  IOC_HYST_DISABLE | IOC_NO_EDGE |           \
                                  IOC_INT_DISABLE | IOC_IOMODE_NORMAL |      \
                                  IOC_NO_WAKE_UP | IOC_INPUT_DISABLE )
 
-#define IOC_LCD_OUTPUT_1          (IOC_CURRENT_2MA | IOC_STRENGTH_MAX |      \
+#define IOC_LCD_OUTPUT_1          (IOC_CURRENT_4MA | IOC_STRENGTH_MAX |      \
                                  IOC_IOPULL_UP | IOC_SLEW_DISABLE |         \
                                  IOC_HYST_DISABLE | IOC_NO_EDGE |           \
                                  IOC_INT_DISABLE | IOC_IOMODE_NORMAL |      \
@@ -116,88 +118,36 @@ Display_Handle DisplaySharp_open(Display_Handle hDisplay,Display_Params *params)
     DisplaySharp_HWAttrs *hwAttrs = (DisplaySharp_HWAttrs *)hDisplay->hwAttrs;
     DisplaySharp_Object  *object  = (DisplaySharp_Object  *)hDisplay->object;
 
-
-    //PIN_Config pinTable[4 + 1];
-
     object->lineClearMode = params->lineClearMode;
 
     if (hwAttrs->csPin != PIN_TERMINATE)
     {
-        //pinTable[i++] = hwAttrs->csPin | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX;
         IOCPortConfigureSet(hwAttrs->csPin, IOC_PORT_GPIO, IOC_LCD_OUTPUT_0);
         GPIO_setOutputEnableDio(hwAttrs->csPin,GPIO_OUTPUT_ENABLE);
     }
     if (hwAttrs->extcominPin != PIN_TERMINATE)
     {
-        //pinTable[i++] = hwAttrs->extcominPin | PIN_GPIO_OUTPUT_EN | PIN_GPIO_LOW | PIN_PUSHPULL | PIN_DRVSTR_MAX;
         IOCPortConfigureSet(hwAttrs->extcominPin, IOC_PORT_GPIO, IOC_LCD_OUTPUT_0);
         GPIO_setOutputEnableDio(hwAttrs->extcominPin,GPIO_OUTPUT_ENABLE);
     }
     if (hwAttrs->powerPin != PIN_TERMINATE)
     {
-        //pinTable[i++] = hwAttrs->powerPin | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MAX;
         IOCPortConfigureSet(hwAttrs->powerPin , IOC_PORT_GPIO, IOC_LCD_OUTPUT_1);
         GPIO_setOutputEnableDio(hwAttrs->powerPin,GPIO_OUTPUT_ENABLE);
     }
     if (hwAttrs->enablePin != PIN_TERMINATE)
     {
-        //pinTable[i++] = hwAttrs->enablePin | PIN_GPIO_OUTPUT_EN | PIN_GPIO_HIGH | PIN_PUSHPULL | PIN_DRVSTR_MAX;
         IOCPortConfigureSet(hwAttrs->enablePin, IOC_PORT_GPIO, IOC_LCD_OUTPUT_1);
         GPIO_setOutputEnableDio(hwAttrs->enablePin,GPIO_OUTPUT_ENABLE);
+        GPIO_writeDio(hwAttrs->enablePin,1);
     }
     
-    /*
-    pinTable[i++] = PIN_TERMINATE;
-    object->hPins = PIN_open(&object->pinState, pinTable);
-    if (object->hPins == NULL)
-    {
-        printf("ERROR: Couldn't open pins for Sharp96x96\n");
-        return NULL;
-    }
+    board_spi_open(4000000, BOARD_IOID_SPI_SCK);
 
-    SPI_Params spiParams;
-    SPI_Params_init(&spiParams);
-    spiParams.bitRate = 4000000;
-
-    object->hSpi = SPI_open(hwAttrs->spiIndex, &spiParams);
-    */
-    board_spi_open(4000000, BOARD_IOID_SPI_CLK_FLASH);
-
-    /*
-    if (object->hSpi == NULL)
-    {
-        printf("ERROR: Couldn't open SPI driver for Sharp96x96\n");
-        PIN_close(object->hPins);
-        object->hPins = NULL;
-        return NULL;
-    }
-    */
     // Init colors
     object->displayColor.bg = ClrBlack;
     object->displayColor.fg = ClrWhite;
 
-    // Exclusive access
-    /*
-    Semaphore_Params semParams;
-    Semaphore_Params_init(&semParams);
-    semParams.mode = Semaphore_Mode_BINARY;
-    Semaphore_construct(&object->semLCD, 1, &semParams);
-    */
-
-    /*
-    * Acceso exclusivo, se inicia el semáforo a uno (será binario)
-    */
-    //PT_SEM_INIT(&mutex,  1);
-
-
-    // Grab LCD
-    //Semaphore_pend((Semaphore_Handle) & object->semLCD, ACCESS_TIMEOUT);
-    /*
-    *   Se espera hasta que el semáforo está disponible. Debe de estarlo al haber 
-    *   sido creado en esta función y es la primera línea ejecutada tras dicha 
-    *   creación.
-    */
-    //PT_SEM_WAIT(pt, &mutex);
     // Initialize the GrLib back-end transport
     SharpGrLib_init(hwAttrs->csPin);
 
@@ -220,13 +170,6 @@ Display_Handle DisplaySharp_open(Display_Handle hDisplay,Display_Params *params)
     GrClearDisplay(&object->g_sContext);
     GrFlush(&object->g_sContext);
 
-    // Release LCD
-    /*
-    *   Se libera la pantalla al enviar una señal al semáforo.
-    */
-    //Semaphore_post((Semaphore_Handle) & object->semLCD);
-    //PT_SEM_SIGNAL(pt,&mutex);
-
     return hDisplay;
 }
 
@@ -244,29 +187,9 @@ void DisplaySharp_clear(Display_Handle hDisplay)
 {
     DisplaySharp_Object *object = (DisplaySharp_Object  *)hDisplay->object;
     
-    /*
-    if (object->hPins == NULL)
-    {
-        return;
-    }
-
-    // Grab LCD
-    
-    if (Semaphore_pend((Semaphore_Handle) & object->semLCD, ACCESS_TIMEOUT))
-    {
-        GrClearDisplay(&object->g_sContext);
-        GrFlush(&object->g_sContext);
-
-        // Release LCD
-        Semaphore_post((Semaphore_Handle) & object->semLCD);
-    }
-    */
-    //PT_SEM_WAIT(pt,&mutex);
-
     GrClearDisplay(&object->g_sContext);
     GrFlush(&object->g_sContext);
 
-    //PT_SEM_SIGNAL(pt,&mutex);
 }
 
 
@@ -327,33 +250,25 @@ void DisplaySharp_put5(Display_Handle hDisplay, uint8_t line,
 
     char    dispStr[23];
 
-    /*
-    if (object->hPins == NULL)
-    {
-        return;
-    }
-    */
-    // Grab LCD
-    //PT_SEM_WAIT(pt,&mutex);
         xp          = column * object->g_sContext.pFont->ucMaxWidth + 1;
         yp          = line * object->g_sContext.pFont->ucHeight + 0;
         clearStartX = clearEndX = xp;
 
         switch (object->lineClearMode)
         {
-        case DISPLAY_CLEAR_LEFT:
-            clearStartX = 0;
-            break;
-        case DISPLAY_CLEAR_RIGHT:
-            clearEndX = object->g_sContext.sClipRegion.sXMax;
-            break;
-        case DISPLAY_CLEAR_BOTH:
-            clearStartX = 0;
-            clearEndX   = object->g_sContext.sClipRegion.sXMax;
-            break;
-        case DISPLAY_CLEAR_NONE:
-        default:
-            break;
+            case DISPLAY_CLEAR_LEFT:
+                clearStartX = 0;
+                break;
+            case DISPLAY_CLEAR_RIGHT:
+                clearEndX = object->g_sContext.sClipRegion.sXMax;
+                break;
+            case DISPLAY_CLEAR_BOTH:
+                clearStartX = 0;
+                clearEndX   = object->g_sContext.sClipRegion.sXMax;
+                break;
+            case DISPLAY_CLEAR_NONE:
+                default:
+                break;
         }
 
         if (clearStartX != clearEndX)
@@ -370,14 +285,12 @@ void DisplaySharp_put5(Display_Handle hDisplay, uint8_t line,
             GrContextForegroundSet(&object->g_sContext, object->displayColor.fg);
         }
 
-        //System_snprintf(dispStr, sizeof(dispStr), (xdc_CString)fmt, a0, a1, a2, a3, a4);
+        snprintf(dispStr, sizeof(dispStr), (const char*)fmt, a0, a1, a2, a3, a4);
 
         // Draw a text on the display
         GrStringDraw(&object->g_sContext,dispStr,AUTO_STRING_LENGTH,xp,yp,OPAQUE_TEXT);
         GrFlush(&object->g_sContext);
 
-        // Release LCD
-    //PT_SEM_SIGNAL(pt,&mutex);
 }
 
 
@@ -394,37 +307,29 @@ void DisplaySharp_close(Display_Handle hDisplay)
 {
     DisplaySharp_HWAttrs *hwAttrs = (DisplaySharp_HWAttrs *)hDisplay->hwAttrs;
 
-    /*
-    if (object->hPins == NULL)
-    {
-        return;
-    }
-    */
-
-    // Grab LCD
-     //PT_SEM_WAIT(pt,&mutex);
         // Turn off the display
-        //PIN_setOutputValue(object->hPins, hwAttrs->enablePin, 0);
-        GPIO_writeDio(hwAttrs->enablePin, 0);
+        if (hwAttrs->enablePin != PIN_TERMINATE){
+            GPIO_writeDio(hwAttrs->enablePin, 0);
+        }
         // Release resources
-        //PIN_close(object->hPins);
-        //object->hPins = NULL;
-        GPIO_setOutputEnableDio(hwAttrs->csPin,GPIO_OUTPUT_DISABLE);
-        GPIO_setOutputEnableDio(hwAttrs->extcominPin,GPIO_OUTPUT_DISABLE);   
-        GPIO_setOutputEnableDio(hwAttrs->powerPin,GPIO_OUTPUT_DISABLE);    
-        GPIO_setOutputEnableDio(hwAttrs->enablePin,GPIO_OUTPUT_DISABLE);
-
-        //SPI_close(object->hSpi);
-        //object->hSpi = NULL;
+        if (hwAttrs->csPin != PIN_TERMINATE){
+            GPIO_setOutputEnableDio(hwAttrs->csPin,GPIO_OUTPUT_DISABLE);
+        }
+        if (hwAttrs->extcominPin != PIN_TERMINATE){
+            GPIO_setOutputEnableDio(hwAttrs->extcominPin,GPIO_OUTPUT_DISABLE);   
+        }
+        if (hwAttrs->powerPin != PIN_TERMINATE){
+            GPIO_setOutputEnableDio(hwAttrs->powerPin,GPIO_OUTPUT_DISABLE);    
+        }
+        if (hwAttrs->enablePin != PIN_TERMINATE){
+            GPIO_setOutputEnableDio(hwAttrs->enablePin,GPIO_OUTPUT_DISABLE);
+        }
         board_spi_close();
 
         // Deconfigure GrLib back-end
         SharpGrLib_init(PIN_UNASSIGNED);
 
         // Release LCD
-        //Semaphore_post((Semaphore_Handle) & object->semLCD);
-     //PT_SEM_SIGNAL(pt,&mutex);
-    
 }
 
 /*!
@@ -455,60 +360,27 @@ int DisplaySharp_control(Display_Handle hDisplay, unsigned int cmd, void *arg)
     switch(cmd)
     {
         case DISPLAY_CMD_TRANSPORT_CLOSE:
-            // Grab LCD
-            //if (Semaphore_pend((Semaphore_Handle) & object->semLCD, ACCESS_TIMEOUT)){
-                //PT_SEM_WAIT(pt,&mutex);
-                //if (object->hSpi)
-                //{
                     // Close SPI and tell back-end there is no SPI
-                    //SPI_close(object->hSpi);
                     board_spi_close();
                     SharpGrLib_init(hwAttrs->csPin);
-                    //object->hSpi = NULL;
                     ret = DISPLAY_STATUS_SUCCESS;
-                //}
-                // Release LCD
-                //Semaphore_post((Semaphore_Handle) & object->semLCD);
-                //PT_SEM_SIGNAL(pt,&mutex);
-            //}
             break;
 
         case DISPLAY_CMD_TRANSPORT_OPEN:
-            // Grab LCD
-            //if (Semaphore_pend((Semaphore_Handle) & object->semLCD, ACCESS_TIMEOUT)){
-                //PT_SEM_WAIT(pt,&mutex);
-                //if (NULL == object->hSpi)
-                //{
                     // Re-open SPI and re-init back-end
-                    //SPI_Params spiParams;
-                    //SPI_Params_init(&spiParams);
-                    //spiParams.bitRate = 4000000;
-                    //object->hSpi = SPI_open(hwAttrs->spiIndex, &spiParams);
-                    board_spi_open(4000000, BOARD_IOID_SPI_CLK_FLASH);
+                    board_spi_open(4000000, BOARD_IOID_SPI_SCK);
                     SharpGrLib_init(hwAttrs->csPin);
                     ret = DISPLAY_STATUS_SUCCESS;
-                //}
-                // Release LCD
-                //Semaphore_post((Semaphore_Handle) & object->semLCD);
-                //PT_SEM_SIGNAL(pt,&mutex);
-            //}
             break;
 
         case DISPLAYSHARP_CMD_SET_COLORS:
-            // Grab LCD
-            //if (Semaphore_pend((Semaphore_Handle) & object->semLCD, ACCESS_TIMEOUT)){
-                //PT_SEM_WAIT(pt,&mutex);
+
                 object->displayColor = *(DisplaySharpColor_t *)arg;
 
                 GrContextForegroundSet(&object->g_sContext, object->displayColor.fg);
                 GrContextBackgroundSet(&object->g_sContext, object->displayColor.bg);
-
-                // Release LCD
-                //Semaphore_post((Semaphore_Handle) & object->semLCD);
-                //PT_SEM_SIGNAL(pt,&mutex);
                 // Return success
                 ret = DISPLAY_STATUS_SUCCESS;
-            //}
             break;
 
         default:

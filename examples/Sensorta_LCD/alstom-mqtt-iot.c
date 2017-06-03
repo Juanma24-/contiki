@@ -28,11 +28,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /**
- * \addtogroup cc26xx-web-demo
+ * \addtogroup ALSTOM-MQTT-IOT
  * @{
  *
  * \file
- *   Main module for the CC26XX web demo. Activates on-device resources,
+ *   Main module for the ALSTOM-MQTT-IOT. Activates on-device resources,
  *   takes sensor readings periodically and caches them for all other modules
  *   to use.
  */
@@ -48,29 +48,44 @@
 #include "batmon-sensor.h"
 #include "alstom-mqtt-iot.h"
 #include "mqtt-client.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "ti-lib.h"
+#include <stdint.h>
+#include <Display/Display.h>
+#include <Display/DisplayExt.h>
+/* Example GrLib image */
+#include "splash_image.h"
+Display_Handle hDisplayLcd;
+uint8_t line = 0;
+
 /*---------------------------------------------------------------------------*/
 PROCESS_NAME(cetic_6lbr_client_process);
-PROCESS(alstom_mqtt_iot_process, "CC26XX Web Demo");
+PROCESS(alstom_mqtt_iot_process, "ALSTOM-MQTT-IOT");
 /*---------------------------------------------------------------------------*/
 /*
  * Update sensor readings in a staggered fashion every SENSOR_READING_PERIOD
- * ticks + a random interval between 0 and SENSOR_READING_RANDOM ticks
+ * ticks
  */
-#define SENSOR_READING_PERIOD (CLOCK_SECOND * 20)
-#define SENSOR_READING_RANDOM (CLOCK_SECOND << 4)
+#define SENSOR_READING_PERIOD (CLOCK_SECOND * 30)
+#define SENSOR_READING_RANDOM (CLOCK_SECOND << 1)
 
 struct ctimer batmon_timer;
-
 struct ctimer bmp_timer, hdc_timer, tmp_timer, opt_timer, mpu_timer;
+
 /*---------------------------------------------------------------------------*/
 /* Provide visible feedback via LEDS while searching for a network */
 #define NO_NET_LED_DURATION        (ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC >> 1)
 
 static struct etimer et;
+/* 
+*	Timer de eventos para finalizar la muestra de una alarma en la LCD tras 
+*	haber saltado una de las alarmas.
+*/
+static struct etimer etlimit;
+
 static struct ctimer ct;
 /*---------------------------------------------------------------------------*/
 /* Parent RSSI functionality */
@@ -93,68 +108,39 @@ alstom_mqtt_iot_config_t alstom_mqtt_iot_config;
 /* A cache of sensor values. Updated periodically or upon key press */
 LIST(sensor_list);
 /*---------------------------------------------------------------------------*/
-/* The objects representing sensors used in this demo */
-#define DEMO_SENSOR(name, type, descr, xml_element, form_field, units) \
+/* 
+* The objects representing sensors used in this demo 
+* Es muy importante el campo form_field ya que es parte del topic de llamada
+* para publicación y para cambiar el intervalo de publicación en cada uno de 
+* los sensores.
+* Aquellos campos de la estructura que no son nombrados en la macro, se 
+* inicializan a 0 o NULL.
+*/
+#define DEMO_SENSOR(name, type, descr, xml_element, form_field, units,limit) \
   alstom_mqtt_iot_sensor_reading_t name##_reading = \
-  { NULL, 0, 0, descr, xml_element, form_field, units, type, 1, 1 }
+  { NULL, 0, 0, descr, xml_element, form_field, units, type, 0, 0, 30, limit,0}
 
 /* CC26xx sensors */
-DEMO_SENSOR(batmon_temp, ALSTOM_MQTT_IOT_SENSOR_BATMON_TEMP,
-            "Battery Temp", "battery-temp", "batmon_temp",
-            ALSTOM_MQTT_IOT_UNIT_TEMP);
-DEMO_SENSOR(batmon_volt, ALSTOM_MQTT_IOT_SENSOR_BATMON_VOLT,
-            "Battery Volt", "battery-volt", "batmon_volt",
-            ALSTOM_MQTT_IOT_UNIT_VOLT);
-
+DEMO_SENSOR(batmon_temp, ALSTOM_MQTT_IOT_SENSOR_BATMON_TEMP,"Battery Temp", "battery-temp", "batmon_temp",ALSTOM_MQTT_IOT_UNIT_TEMP,ALSTOM_MQTT_IOT_SENSOR_BATMON_TEMP_LIMIT);
+DEMO_SENSOR(batmon_volt, ALSTOM_MQTT_IOT_SENSOR_BATMON_VOLT,"Battery Volt", "battery-volt", "batmon_volt",ALSTOM_MQTT_IOT_UNIT_VOLT,ALSTOM_MQTT_IOT_SENSOR_BATMON_VOLT_LIMIT);
 /* Sensortag sensors */
-DEMO_SENSOR(bmp_pres, ALSTOM_MQTT_IOT_SENSOR_BMP_PRES,
-            "Air Pressure", "air-pressure", "bmp_pres",
-            ALSTOM_MQTT_IOT_UNIT_PRES);
-DEMO_SENSOR(bmp_temp, ALSTOM_MQTT_IOT_SENSOR_BMP_TEMP,
-            "Air Temp", "air-temp", "bmp_temp",
-            ALSTOM_MQTT_IOT_UNIT_TEMP);
-DEMO_SENSOR(hdc_temp, ALSTOM_MQTT_IOT_SENSOR_HDC_TEMP,
-            "HDC Temp", "hdc-temp", "hdc_temp",
-            ALSTOM_MQTT_IOT_UNIT_TEMP);
-DEMO_SENSOR(hdc_hum, ALSTOM_MQTT_IOT_SENSOR_HDC_HUMIDITY,
-            "HDC Humidity", "hdc-humidity", "hdc_hum",
-            ALSTOM_MQTT_IOT_UNIT_HUMIDITY);
-DEMO_SENSOR(tmp_amb, ALSTOM_MQTT_IOT_SENSOR_TMP_AMBIENT,
-            "Ambient Temp", "ambient-temp", "tmp_amb",
-            ALSTOM_MQTT_IOT_UNIT_TEMP);
-DEMO_SENSOR(tmp_obj, ALSTOM_MQTT_IOT_SENSOR_TMP_OBJECT,
-            "Object Temp", "object-temp", "tmp_obj",
-            ALSTOM_MQTT_IOT_UNIT_TEMP);
-DEMO_SENSOR(opt, ALSTOM_MQTT_IOT_SENSOR_OPT_LIGHT,
-            "Light", "light", "light",
-            ALSTOM_MQTT_IOT_UNIT_LIGHT);
-
-/* MPU Readings */
-DEMO_SENSOR(mpu_acc_x, ALSTOM_MQTT_IOT_SENSOR_MPU_ACC_X,
-            "Acc X", "acc-x", "acc_x",
-            ALSTOM_MQTT_IOT_UNIT_ACC);
-DEMO_SENSOR(mpu_acc_y, ALSTOM_MQTT_IOT_SENSOR_MPU_ACC_Y,
-            "Acc Y", "acc-y", "acc_y",
-            ALSTOM_MQTT_IOT_UNIT_ACC);
-DEMO_SENSOR(mpu_acc_z, ALSTOM_MQTT_IOT_SENSOR_MPU_ACC_Z,
-            "Acc Z", "acc-z", "acc_z",
-            ALSTOM_MQTT_IOT_UNIT_ACC);
-
-DEMO_SENSOR(mpu_gyro_x, ALSTOM_MQTT_IOT_SENSOR_MPU_GYRO_X,
-            "Gyro X", "gyro-x", "gyro_x",
-            ALSTOM_MQTT_IOT_UNIT_GYRO);
-DEMO_SENSOR(mpu_gyro_y, ALSTOM_MQTT_IOT_SENSOR_MPU_GYRO_Y,
-            "Gyro Y", "gyro-y", "gyro_y",
-            ALSTOM_MQTT_IOT_UNIT_GYRO);
-DEMO_SENSOR(mpu_gyro_z, ALSTOM_MQTT_IOT_SENSOR_MPU_GYRO_Z,
-            "Gyro Z", "gyro-z", "gyro_Z",
-            ALSTOM_MQTT_IOT_UNIT_GYRO);
+DEMO_SENSOR(bmp_pres, ALSTOM_MQTT_IOT_SENSOR_BMP_PRES,"Air Pressure", "air-pressure", "bmp_pres",ALSTOM_MQTT_IOT_UNIT_PRES,ALSTOM_MQTT_IOT_SENSOR_BMP_PRES_LIMIT);
+DEMO_SENSOR(bmp_temp, ALSTOM_MQTT_IOT_SENSOR_BMP_TEMP,"Air Temp", "air-temp", "bmp_temp",ALSTOM_MQTT_IOT_UNIT_TEMP,ALSTOM_MQTT_IOT_SENSOR_BMP_TEMP_LIMIT);
+DEMO_SENSOR(hdc_temp, ALSTOM_MQTT_IOT_SENSOR_HDC_TEMP,"HDC Temp", "hdc-temp", "hdc_temp",ALSTOM_MQTT_IOT_UNIT_TEMP,ALSTOM_MQTT_IOT_SENSOR_HDC_TEMP_LIMIT);
+DEMO_SENSOR(hdc_hum, ALSTOM_MQTT_IOT_SENSOR_HDC_HUMIDITY,"HDC Humidity", "hdc-humidity", "hdc_hum",ALSTOM_MQTT_IOT_UNIT_HUMIDITY,ALSTOM_MQTT_IOT_SENSOR_HDC_HUMIDITY_LIMIT);
+DEMO_SENSOR(tmp_amb, ALSTOM_MQTT_IOT_SENSOR_TMP_AMBIENT,"Ambient Temp", "ambient-temp", "tmp_amb",ALSTOM_MQTT_IOT_UNIT_TEMP,ALSTOM_MQTT_IOT_SENSOR_TMP_AMBIENT_LIMIT);
+DEMO_SENSOR(tmp_obj, ALSTOM_MQTT_IOT_SENSOR_TMP_OBJECT,"Object Temp", "object-temp", "tmp_obj",ALSTOM_MQTT_IOT_UNIT_TEMP,ALSTOM_MQTT_IOT_SENSOR_TMP_OBJECT_LIMIT);
+DEMO_SENSOR(opt, ALSTOM_MQTT_IOT_SENSOR_OPT_LIGHT,"Light", "light", "light",ALSTOM_MQTT_IOT_UNIT_LIGHT,ALSTOM_MQTT_IOT_SENSOR_OPT_LIGHT_LIMIT);
 /*---------------------------------------------------------------------------*/
 static void init_bmp_reading(void *data);
 static void init_light_reading(void *data);
 static void init_hdc_reading(void *data);
 static void init_tmp_reading(void *data);
-static void init_mpu_reading(void *data);
+/*---------------------------------------------------------------------------*/
+Display_Handle*
+getDisplay_handle(void){
+  return &hDisplayLcd;
+}
 /*---------------------------------------------------------------------------*/
 static void
 publish_led_off(void *d)
@@ -162,7 +148,10 @@ publish_led_off(void *d)
   leds_off(ALSTOM_MQTT_IOT_STATUS_LED);
 }
 /*---------------------------------------------------------------------------*/
-static void
+/*
+*	Guarda la configuración de los sensores en la memoria FLASH.
+*/
+void
 save_config()
 {
   /* Dump current running config to flash */
@@ -185,13 +174,19 @@ save_config()
     alstom_mqtt_iot_config.magic = CONFIG_MAGIC;
     alstom_mqtt_iot_config.len = sizeof(alstom_mqtt_iot_config_t);
     alstom_mqtt_iot_config.sensors_bitmap = 0;
+    alstom_mqtt_iot_config.limits_bitmap = 0;
 
     for(reading = list_head(sensor_list);reading != NULL;reading = list_item_next(reading)) {
       if(reading->publish) {
-        alstom_mqtt_iot_config.sensors_bitmap |= (1 << reading->type);
+        alstom_mqtt_iot_config.sensors_bitmap |= (1 << reading->type); 
       }
+      if(reading->limitOn) {
+        alstom_mqtt_iot_config.limits_bitmap |= (1 << reading->type);
+        
+      }
+      alstom_mqtt_iot_config.sensors_intervals[reading->type] = reading->interval;
+      alstom_mqtt_iot_config.sensors_limits[reading->type] = reading->limit;
     }
-
     rv = ext_flash_write(CONFIG_FLASH_OFFSET, sizeof(alstom_mqtt_iot_config_t),(uint8_t *)&alstom_mqtt_iot_config);
     if(!rv) {
       printf("Error saving config\n");
@@ -199,8 +194,12 @@ save_config()
   }
 
   ext_flash_close();
+
 }
 /*---------------------------------------------------------------------------*/
+/*
+*	Carga la configuración de los sensores desde memoria FLASH.
+*/
 static void
 load_config()
 {
@@ -228,17 +227,25 @@ load_config()
 
   if(tmp_cfg.magic == CONFIG_MAGIC && tmp_cfg.len == sizeof(tmp_cfg)) {
     memcpy(&alstom_mqtt_iot_config, &tmp_cfg, sizeof(alstom_mqtt_iot_config));
+  }else{
+    return;
   }
 
-  for(reading = list_head(sensor_list);
-      reading != NULL;
-      reading = list_item_next(reading)) {
+  for(reading = list_head(sensor_list);reading != NULL;reading = list_item_next(reading)) {
     if(alstom_mqtt_iot_config.sensors_bitmap & (1 << reading->type)) {
       reading->publish = 1;
     } else {
       reading->publish = 0;
       snprintf(reading->converted, ALSTOM_MQTT_IOT_CONVERTED_LEN, "\"N/A\"");
     }
+    if(alstom_mqtt_iot_config.limits_bitmap & (1 << reading->type)) {
+      reading->limitOn = 1;
+    } else {
+      reading->limitOn = 0;
+      snprintf(reading->converted, ALSTOM_MQTT_IOT_CONVERTED_LEN, "\"N/A\"");
+    }
+    reading->interval = alstom_mqtt_iot_config.sensors_intervals[reading->type];
+    reading->limit = alstom_mqtt_iot_config.sensors_limits[reading->type];
   }
 }
 /*---------------------------------------------------------------------------*/
@@ -246,8 +253,7 @@ load_config()
 AUTOSTART_PROCESSES(&alstom_mqtt_iot_process);
 /*---------------------------------------------------------------------------*/
 int
-alstom_mqtt_iot_ipaddr_sprintf(char *buf, uint8_t buf_len,
-                               const uip_ipaddr_t *addr)
+alstom_mqtt_iot_ipaddr_sprintf(char *buf, uint8_t buf_len,const uip_ipaddr_t *addr)
 {
   uint16_t a;
   uint8_t len = 0;
@@ -274,11 +280,9 @@ alstom_mqtt_iot_ipaddr_sprintf(char *buf, uint8_t buf_len,
 const alstom_mqtt_iot_sensor_reading_t *
 alstom_mqtt_iot_sensor_lookup(int sens_type)
 {
-  alstom_mqtt_iot_sensor_reading_t *reading = NULL;
+    alstom_mqtt_iot_sensor_reading_t *reading = NULL;
 
-  for(reading = list_head(sensor_list);
-      reading != NULL;
-      reading = list_item_next(reading)) {
+  for(reading = list_head(sensor_list);reading != NULL;reading = list_item_next(reading)) {
     if(reading->type == sens_type) {
       return reading;
     }
@@ -287,21 +291,28 @@ alstom_mqtt_iot_sensor_lookup(int sens_type)
   return NULL;
 }
 /*---------------------------------------------------------------------------*/
-const alstom_mqtt_iot_sensor_reading_t *
+alstom_mqtt_iot_sensor_reading_t *
 alstom_mqtt_iot_sensor_first()
 {
   return list_head(sensor_list);
 }
 /*---------------------------------------------------------------------------*/
+/*
+* Por defecto el Sensortag no publicará ninguno de los valores de 
+* los sensores. Debe seleccionarse desde el cloud los sensores a leer. 
+* Los intervalos vuelven a 30 segundos. 
+*/
 void
 alstom_mqtt_iot_restore_defaults(void)
 {
+
   alstom_mqtt_iot_sensor_reading_t *reading = NULL;
 
   leds_on(LEDS_ALL);
 
   for(reading = list_head(sensor_list);reading != NULL;reading = list_item_next(reading)) {
-    reading->publish = 1;
+    reading->publish = 0;
+    reading->interval = 30;
   }
 
 
@@ -314,8 +325,7 @@ alstom_mqtt_iot_restore_defaults(void)
 /*---------------------------------------------------------------------------*/
 
 static void
-echo_reply_handler(uip_ipaddr_t *source, uint8_t ttl, uint8_t *data,
-                   uint16_t datalen)
+echo_reply_handler(uip_ipaddr_t *source, uint8_t ttl, uint8_t *data,uint16_t datalen)
 {
   if(uip_ip6addr_cmp(source, uip_ds6_defrt_choose())) {
     def_rt_rssi = sicslowpan_get_last_rssi();
@@ -333,22 +343,42 @@ ping_parent(void)
                  ALSTOM_MQTT_IOT_ECHO_REQ_PAYLOAD_LEN);
 }
 /*---------------------------------------------------------------------------*/
+void cabecera_sensores_carga(){
+  Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+  Display_clear(hDisplayLcd);
+  Display_print0(hDisplayLcd, 0, 1, "Sensors Values");
+  Display_print0(hDisplayLcd, 1, 0, "Battery:");
+  Display_print0(hDisplayLcd, 2, 0, "Amb Tmp:");
+  Display_print0(hDisplayLcd, 3, 0, "Obj Tmp:");
+  Display_print0(hDisplayLcd, 4, 0, "Press");
+  Display_print0(hDisplayLcd, 5, 0, "Humidity:");
+  Display_print0(hDisplayLcd, 6, 0, "Light:");
+}
+/*---------------------------------------------------------------------------*/
 static void
 get_batmon_reading(void *data)
 {
   int value;
   char *buf;
-  clock_time_t next = SENSOR_READING_PERIOD +
-    (random_rand() % SENSOR_READING_RANDOM);
+  clock_time_t next = batmon_volt_reading.interval*CLOCK_SECOND +(random_rand() % SENSOR_READING_RANDOM);
 
   if(batmon_temp_reading.publish) {
     value = batmon_sensor.value(BATMON_SENSOR_TYPE_TEMP);
     if(value != CC26XX_SENSOR_READING_ERROR) {
       batmon_temp_reading.raw = value;
 
+      compare_and_update(&batmon_temp_reading);
+
       buf = batmon_temp_reading.converted;
       memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
       snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d", value);
+      /* 
+      * Si el valor de temperatura de la batería está por encima 
+      * de un valor límite, se publica de forma inmediata una alarma.
+      */
+      if((value > batmon_temp_reading.limit) && batmon_temp_reading.limitOn){
+        process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&batmon_volt_reading.type);
+      }
     }
   }
 
@@ -356,48 +386,66 @@ get_batmon_reading(void *data)
     value = batmon_sensor.value(BATMON_SENSOR_TYPE_VOLT);
     if(value != CC26XX_SENSOR_READING_ERROR) {
       batmon_volt_reading.raw = value;
+      
+      compare_and_update(&batmon_volt_reading);
 
       buf = batmon_volt_reading.converted;
       memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
       snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d", (value * 125) >> 5);
+      Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+      Display_print1(hDisplayLcd, 1, 8, "%dmV",(value*125) >> 5);
+      /* 
+      * Si el valor de batería está por debajo de un valor límite, se publica de forma inmediata una alarma.
+      */
+      if((((value *125) >> 5) < batmon_volt_reading.limit) && batmon_volt_reading.limitOn){
+        process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&batmon_volt_reading.type);
+        Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+        Display_clear(hDisplayLcd);
+        Display_print0(hDisplayLcd, 5, 5,"BATERIA");
+        Display_print0(hDisplayLcd,6,6,"BAJA");
+        etimer_set(&et, 10 * CLOCK_SECOND);
+      }
+
     }
   }
 
   ctimer_set(&batmon_timer, next, get_batmon_reading, NULL);
 }
 /*---------------------------------------------------------------------------*/
-static void
+/*
+* Compara el último valor leído del sensor con el anterior.DESHABILITADO->Si es diferente 
+* Changed pasa a valer 1 y copia el valor actual en el valor anterior. En caso
+* contrario changed pasa a valer 0.
+* NUEVO -> Para que siempre haya publicaciones a la frecuencia impuesta, el valor de 
+* changed se pone a uno cada vez que finaliza una lectura.
+*/
+void
 compare_and_update(alstom_mqtt_iot_sensor_reading_t *reading)
 {
-  if(reading->last == reading->raw) {
+  /*if(reading->last == reading->raw) {
     reading->changed = 0;
   } else {
     reading->last = reading->raw;
     reading->changed = 1;
-  }
+  }*/
+  reading->last = reading->raw;
+  reading->changed = 1;
+  printf("%s leido, changed: %d \n",reading->form_field,reading->changed);
 }
 /*---------------------------------------------------------------------------*/
-static void
-print_mpu_reading(int reading, char *buf)
-{
-  char *loc_buf = buf;
-
-  if(reading < 0) {
-    sprintf(loc_buf, "-");
-    reading = -reading;
-    loc_buf++;
-  }
-
-  sprintf(loc_buf, "%d.%02d", reading / 100, reading % 100);
-}
-/*---------------------------------------------------------------------------*/
+/*
+* Lectura de los diferentes sensores. Cada sensor tiene su propia estructura
+* reading que es modificada de forma directa. Dentro de esa estructura se ha añadido la
+* propiedad interval, permitiendo que la lectura de cada sensor pueda ser efectuada
+* en un intervalo de tiempo independiente.
+*/
 static void
 get_bmp_reading()
 {
   int value;
   char *buf;
-  clock_time_t next = SENSOR_READING_PERIOD +
-    (random_rand() % SENSOR_READING_RANDOM);
+
+  clock_time_t next = bmp_pres_reading.interval*CLOCK_SECOND +(random_rand() % SENSOR_READING_RANDOM);
 
   if(bmp_pres_reading.publish) {
     value = bmp_280_sensor.value(BMP_280_SENSOR_TYPE_PRESS);
@@ -408,8 +456,23 @@ get_bmp_reading()
 
       buf = bmp_pres_reading.converted;
       memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
-      snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,
-               value % 100);
+      snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,value % 100);
+      Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+      Display_print2(hDisplayLcd, 4, 6, "%d.%02dmPa", value / 100,value % 100);
+      /* 
+      * Si el valor de presion del sensor está por encima 
+      * de un valor límite, se publica de forma inmediata una alarma.
+      */
+      if((value > bmp_pres_reading.limit) && bmp_pres_reading.limitOn){
+        process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&bmp_pres_reading.type);
+        Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+    	Display_clear(hDisplayLcd);
+        Display_print0(hDisplayLcd, 4, 4,"PRESION");
+        Display_print0(hDisplayLcd,5,5,"LIMITE");
+        Display_print0(hDisplayLcd,6,5,"SUPERADO");
+        etimer_set(&et, 30 * CLOCK_SECOND);
+      }
+      
     }
   }
 
@@ -422,8 +485,15 @@ get_bmp_reading()
 
       buf = bmp_temp_reading.converted;
       memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
-      snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,
-               value % 100);
+      snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,value % 100);
+      /* 
+      * Si el valor de temperatura del sensor está por encima 
+      * de un valor límite, se publica de forma inmediata una alarma.
+      */
+      if((value > bmp_temp_reading.limit) && bmp_temp_reading.limitOn){
+        process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&bmp_temp_reading.type);
+      }
+      
     }
   }
 
@@ -437,12 +507,10 @@ get_tmp_reading()
 {
   int value;
   char *buf;
-  clock_time_t next = SENSOR_READING_PERIOD +
-    (random_rand() % SENSOR_READING_RANDOM);
+  clock_time_t next = tmp_amb_reading.interval*CLOCK_SECOND +(random_rand() % SENSOR_READING_RANDOM);
 
   if(tmp_amb_reading.publish || tmp_obj_reading.publish) {
-    if(tmp_007_sensor.value(TMP_007_SENSOR_TYPE_ALL) ==
-       CC26XX_SENSOR_READING_ERROR) {
+    if(tmp_007_sensor.value(TMP_007_SENSOR_TYPE_ALL) ==CC26XX_SENSOR_READING_ERROR) {
 
       SENSORS_DEACTIVATE(tmp_007_sensor);
       ctimer_set(&tmp_timer, next, init_tmp_reading, NULL);
@@ -457,8 +525,23 @@ get_tmp_reading()
 
     buf = tmp_amb_reading.converted;
     memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
-    snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%03d", value / 1000,
-             value % 1000);
+    snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%03d", value / 1000,value % 1000);
+    Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+    Display_print2(hDisplayLcd, 2, 8, "%d.%03dC", value / 1000,value % 1000);
+    /* 
+      * Si el valor de temperatura del sensor está por encima 
+      * de un valor límite, se publica de forma inmediata una alarma.
+    */ 
+    if((value > tmp_amb_reading.limit) && tmp_amb_reading.limitOn){
+      process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&tmp_amb_reading.type);
+      Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+      Display_clear(hDisplayLcd);
+      Display_print0(hDisplayLcd, 4, 4,"TMP AMB");
+      Display_print0(hDisplayLcd,5,5,"LIMITE");
+      Display_print0(hDisplayLcd,6,5,"SUPERADO");
+      etimer_set(&et, 10 * CLOCK_SECOND);
+    }
+      
   }
 
   if(tmp_obj_reading.publish) {
@@ -469,8 +552,20 @@ get_tmp_reading()
 
     buf = tmp_obj_reading.converted;
     memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
-    snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%03d", value / 1000,
-             value % 1000);
+    snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%03d", value / 1000,value % 1000);
+    Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+    Display_print2(hDisplayLcd, 3, 8, "%d.%03dC", value / 1000,value % 1000);
+    /* 
+      * Si el valor de temperatura del sensor está por encima 
+      * de un valor límite, se publica de forma inmediata una alarma.
+    */
+    if((value > tmp_amb_reading.limit) && tmp_amb_reading.limitOn){
+      process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&tmp_obj_reading.type);
+      Display_print0(hDisplayLcd, 4, 4,"TMP OBJ");
+      Display_print0(hDisplayLcd,5,5,"LIMITE");
+      Display_print0(hDisplayLcd,6,5,"SUPERADO");
+      etimer_set(&et, 10 * CLOCK_SECOND);
+    }
   }
 
   SENSORS_DEACTIVATE(tmp_007_sensor);
@@ -483,8 +578,7 @@ get_hdc_reading()
 {
   int value;
   char *buf;
-  clock_time_t next = SENSOR_READING_PERIOD +
-    (random_rand() % SENSOR_READING_RANDOM);
+  clock_time_t next = hdc_hum_reading.interval*CLOCK_SECOND +(random_rand() % SENSOR_READING_RANDOM);
 
   if(hdc_temp_reading.publish) {
     value = hdc_1000_sensor.value(HDC_1000_SENSOR_TYPE_TEMP);
@@ -495,8 +589,14 @@ get_hdc_reading()
 
       buf = hdc_temp_reading.converted;
       memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
-      snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,
-               value % 100);
+      snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,value % 100);
+      /* 
+      * Si el valor de temperatura del sensor está por encima 
+      * de un valor límite, se publica de forma inmediata una alarma.
+      */
+      if((value > hdc_temp_reading.limit) && hdc_temp_reading.limitOn){
+        process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&hdc_temp_reading.type);
+      }
     }
   }
 
@@ -509,8 +609,20 @@ get_hdc_reading()
 
       buf = hdc_hum_reading.converted;
       memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
-      snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,
-               value % 100);
+      snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,value % 100);
+      Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+      Display_print2(hDisplayLcd, 5, 9, "%d.%02dRH", value / 100,value % 100);
+      /* 
+      * Si el valor de humedad del sensor está por encima 
+      * de un valor límite, se publica de forma inmediata una alarma.
+      */
+      if((value > hdc_hum_reading.limit) && hdc_hum_reading.limitOn){
+        process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&hdc_hum_reading.type);
+        Display_print0(hDisplayLcd, 4, 4,"HUMEDAD");
+     	Display_print0(hDisplayLcd,5,5,"LIMITE");
+      	Display_print0(hDisplayLcd,6,5,"SUPERADO");
+      	etimer_set(&et, 10 * CLOCK_SECOND);
+      }
     }
   }
 
@@ -522,9 +634,7 @@ get_light_reading()
 {
   int value;
   char *buf;
-  clock_time_t next = SENSOR_READING_PERIOD +
-    (random_rand() % SENSOR_READING_RANDOM);
-
+  clock_time_t next = opt_reading.interval*CLOCK_SECOND +(random_rand() % SENSOR_READING_RANDOM);
   value = opt_3001_sensor.value(0);
 
   if(value != CC26XX_SENSOR_READING_ERROR) {
@@ -534,103 +644,24 @@ get_light_reading()
 
     buf = opt_reading.converted;
     memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
-    snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,
-             value % 100);
+    snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,value % 100);
+    Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+    Display_print2(hDisplayLcd, 6, 6, "%d.%02dlux", value / 100 ,value % 100);
+    /* 
+    * Si el valor de temperatura del sensor está por encima 
+    * de un valor límite, se publica de forma inmediata una alarma.
+    */  
+    if((value > opt_reading.limit) && opt_reading.limitOn){
+      process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&opt_reading.type);
+      Display_print0(hDisplayLcd, 4, 3,"LUMINOSIDAD");
+      Display_print0(hDisplayLcd,5,5,"LIMITE");
+      Display_print0(hDisplayLcd,6,5,"SUPERADO");
+      etimer_set(&et, 10 * CLOCK_SECOND);
+    }
   }
 
   /* The OPT will turn itself off, so we don't need to call its DEACTIVATE */
   ctimer_set(&opt_timer, next, init_light_reading, NULL);
-}
-/*---------------------------------------------------------------------------*/
-static void
-get_mpu_reading()
-{
-  clock_time_t next = SENSOR_READING_PERIOD +
-    (random_rand() % SENSOR_READING_RANDOM);
-  int raw;
-
-  if(mpu_gyro_x_reading.publish) {
-    raw = mpu_9250_sensor.value(MPU_9250_SENSOR_TYPE_GYRO_X);
-    if(raw != CC26XX_SENSOR_READING_ERROR) {
-      mpu_gyro_x_reading.raw = raw;
-    }
-  }
-
-  if(mpu_gyro_y_reading.publish) {
-    raw = mpu_9250_sensor.value(MPU_9250_SENSOR_TYPE_GYRO_Y);
-    if(raw != CC26XX_SENSOR_READING_ERROR) {
-      mpu_gyro_y_reading.raw = raw;
-    }
-  }
-
-  if(mpu_gyro_z_reading.publish) {
-    raw = mpu_9250_sensor.value(MPU_9250_SENSOR_TYPE_GYRO_Z);
-    if(raw != CC26XX_SENSOR_READING_ERROR) {
-      mpu_gyro_z_reading.raw = raw;
-    }
-  }
-
-  if(mpu_acc_x_reading.publish) {
-    raw = mpu_9250_sensor.value(MPU_9250_SENSOR_TYPE_ACC_X);
-    if(raw != CC26XX_SENSOR_READING_ERROR) {
-      mpu_acc_x_reading.raw = raw;
-    }
-  }
-
-  if(mpu_acc_y_reading.publish) {
-    raw = mpu_9250_sensor.value(MPU_9250_SENSOR_TYPE_ACC_Y);
-    if(raw != CC26XX_SENSOR_READING_ERROR) {
-      mpu_acc_y_reading.raw = raw;
-    }
-  }
-
-  if(mpu_acc_z_reading.publish) {
-    raw = mpu_9250_sensor.value(MPU_9250_SENSOR_TYPE_ACC_Z);
-    if(raw != CC26XX_SENSOR_READING_ERROR) {
-      mpu_acc_z_reading.raw = raw;
-    }
-  }
-
-  SENSORS_DEACTIVATE(mpu_9250_sensor);
-
-  if(mpu_gyro_x_reading.publish) {
-    compare_and_update(&mpu_gyro_x_reading);
-    memset(mpu_gyro_x_reading.converted, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
-    print_mpu_reading(mpu_gyro_x_reading.raw, mpu_gyro_x_reading.converted);
-  }
-
-  if(mpu_gyro_y_reading.publish) {
-    compare_and_update(&mpu_gyro_y_reading);
-    memset(mpu_gyro_y_reading.converted, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
-    print_mpu_reading(mpu_gyro_y_reading.raw, mpu_gyro_y_reading.converted);
-  }
-
-  if(mpu_gyro_z_reading.publish) {
-    compare_and_update(&mpu_gyro_z_reading);
-    memset(mpu_gyro_z_reading.converted, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
-    print_mpu_reading(mpu_gyro_z_reading.raw, mpu_gyro_z_reading.converted);
-  }
-
-  if(mpu_acc_x_reading.publish) {
-    compare_and_update(&mpu_acc_x_reading);
-    memset(mpu_acc_x_reading.converted, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
-    print_mpu_reading(mpu_acc_x_reading.raw, mpu_acc_x_reading.converted);
-  }
-
-  if(mpu_acc_y_reading.publish) {
-    compare_and_update(&mpu_acc_y_reading);
-    memset(mpu_acc_y_reading.converted, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
-    print_mpu_reading(mpu_acc_y_reading.raw, mpu_acc_y_reading.converted);
-  }
-
-  if(mpu_acc_z_reading.publish) {
-    compare_and_update(&mpu_acc_z_reading);
-    memset(mpu_acc_z_reading.converted, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
-    print_mpu_reading(mpu_acc_z_reading.raw, mpu_acc_z_reading.converted);
-  }
-
-  /* We only use the single timer */
-  ctimer_set(&mpu_timer, next, init_mpu_reading, NULL);
 }
 /*---------------------------------------------------------------------------*/
 static void
@@ -658,8 +689,8 @@ init_hdc_reading(void *data)
 {
   if(hdc_hum_reading.publish || hdc_temp_reading.publish) {
     SENSORS_ACTIVATE(hdc_1000_sensor);
-  } else {
-    ctimer_set(&hdc_timer, CLOCK_SECOND, init_hdc_reading, NULL);
+  } else {  
+    ctimer_set(&hdc_timer, CLOCK_SECOND, init_hdc_reading, NULL); 
   }
 }
 /*---------------------------------------------------------------------------*/
@@ -673,29 +704,7 @@ init_light_reading(void *data)
   }
 }
 /*---------------------------------------------------------------------------*/
-static void
-init_mpu_reading(void *data)
-{
-  int readings_bitmap = 0;
-
-  if(mpu_acc_x_reading.publish || mpu_acc_y_reading.publish ||
-     mpu_acc_z_reading.publish) {
-    readings_bitmap |= MPU_9250_SENSOR_TYPE_ACC;
-  }
-
-  if(mpu_gyro_x_reading.publish || mpu_gyro_y_reading.publish ||
-     mpu_gyro_z_reading.publish) {
-    readings_bitmap |= MPU_9250_SENSOR_TYPE_GYRO;
-  }
-
-  if(readings_bitmap) {
-    mpu_9250_sensor.configure(SENSORS_ACTIVE, readings_bitmap);
-  } else {
-    ctimer_set(&mpu_timer, CLOCK_SECOND, init_mpu_reading, NULL);
-  }
-}
-/*---------------------------------------------------------------------------*/
-static void
+void
 init_sensor_readings(void)
 {
   /*
@@ -703,16 +712,19 @@ init_sensor_readings(void)
    * trigger periodic value updates
    */
   get_batmon_reading(NULL);
-
   init_bmp_reading(NULL);
   init_light_reading(NULL);
   init_hdc_reading(NULL);
   init_tmp_reading(NULL);
-  init_mpu_reading(NULL);
-
   return;
 }
 /*---------------------------------------------------------------------------*/
+/*
+* Añade a la lista de sensores todas las estructuras de los sensores a medir.
+* Si un sensor no es añadido a esta lista, no podrá ser referenciado externamente,
+* solo de forma directa con una llamada a su estructura, esto impediría la 
+* publicación desde mqtt_client.c 
+*/ 
 static void
 init_sensors(void)
 {
@@ -720,7 +732,6 @@ init_sensors(void)
   list_add(sensor_list, &batmon_temp_reading);
   list_add(sensor_list, &batmon_volt_reading);
   SENSORS_ACTIVATE(batmon_sensor);
-
   list_add(sensor_list, &bmp_pres_reading);
   list_add(sensor_list, &bmp_temp_reading);
 
@@ -731,15 +742,6 @@ init_sensors(void)
 
   list_add(sensor_list, &hdc_hum_reading);
   list_add(sensor_list, &hdc_temp_reading);
-
-  list_add(sensor_list, &mpu_acc_x_reading);
-  list_add(sensor_list, &mpu_acc_y_reading);
-  list_add(sensor_list, &mpu_acc_z_reading);
-  list_add(sensor_list, &mpu_gyro_x_reading);
-  list_add(sensor_list, &mpu_gyro_y_reading);
-  list_add(sensor_list, &mpu_gyro_z_reading);
-
-  SENSORS_ACTIVATE(reed_relay_sensor);
 }
 /*---------------------------------------------------------------------------*/
 PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
@@ -748,33 +750,61 @@ PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
 
   printf("ALSTOM MQTT IoT Process\n");
 
-  init_sensors();                                                                                                                   //Inicia Sensores
-                                                                                                                                    //Reservas de memoria para procesos
+  /* Initialize display and try to open both UART and LCD types of display. */
+  Display_Params params;
+  Display_Params_init(&params);
+  params.lineClearMode = DISPLAY_CLEAR_RIGHT;
+  hDisplayLcd = Display_open(Display_Type_LCD, &params);
+  tContext *pContext = DisplayExt_getGrlibContext(hDisplayLcd);
+  GrImageDraw(pContext, &splashImage, 0, 0);
+  GrFlush(pContext);
+  clock_wait(5*CLOCK_SECOND);
+  Display_clear(hDisplayLcd);
+ 
+
+  init_sensors(); 
+
+  Display_print0(hDisplayLcd, line, 0, "Sensores Inic");
+  clock_wait(CLOCK_SECOND/4);   
+  line = Display_move(hDisplayLcd,"Sensores Inic",line);                                                                                                        
+                                                                                                                                   
   alstom_mqtt_iot_publish_event = process_alloc_event();
   alstom_mqtt_iot_config_loaded_event = process_alloc_event();
   alstom_mqtt_iot_load_config_defaults = process_alloc_event();
 
-  process_start(&mqtt_client_process, NULL);                                                                                        //Inicia el cliente MQTT
+
+  process_start(&mqtt_client_process, NULL);                                                                                       
 
   /*
    * Now that processes have set their own config default values, set our
    * own defaults and restore saved config from flash...
    */
-  alstom_mqtt_iot_config.sensors_bitmap = 0xFFFFFFFF; /* all on by default */
   alstom_mqtt_iot_config.def_rt_ping_interval = ALSTOM_MQTT_IOT_DEFAULT_RSSI_MEAS_INTERVAL;
-  load_config();                                                                  //Carga la configuración
 
+  load_config(); 
+
+  Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+  Display_print0(hDisplayLcd, line, 0, "Cargada Config");
+  clock_wait(CLOCK_SECOND/4);   
+  line = Display_move(hDisplayLcd,"Cargada Config",line);                                                                                                            
+ 
   /*
    * Notify all other processes (basically the ones in this demo) that the
    * configuration has been loaded from flash, in case they care
    */
   process_post(PROCESS_BROADCAST, alstom_mqtt_iot_config_loaded_event, NULL);
 
-  init_sensor_readings();                                                                                     //Inicia lectura de Sensores
+  init_sensor_readings();
 
+
+  
+  Display_print0(hDisplayLcd, line, 0, "Lecturas Inic");
+  clock_wait(CLOCK_SECOND/4);   
+  line = Display_move(hDisplayLcd,"Lecturas Inic",line);                                                                                                            
+ 
+  
   def_rt_rssi = 0x8000000;
-  uip_icmp6_echo_reply_callback_add(&echo_reply_notification,
-                                    echo_reply_handler);
+  uip_icmp6_echo_reply_callback_add(&echo_reply_notification,echo_reply_handler);
   etimer_set(&echo_request_timer, ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC);
 
   etimer_set(&et, ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC);
@@ -784,14 +814,34 @@ PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
    * (e.g a button press / or reed trigger)
    */
   while(1) {
+    uint8_t cargada_cabecera = 0; 
     if(ev == PROCESS_EVENT_TIMER && etimer_expired(&et)) {
       if(uip_ds6_get_global(ADDR_PREFERRED) == NULL) {
         leds_on(ALSTOM_MQTT_IOT_STATUS_LED);
+        cargada_cabecera = 0;
+        Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+        Display_clear(hDisplayLcd);
+        line = 0;
+        Display_print0(hDisplayLcd, 1, 0, "Conectando.");
+        clock_wait(CLOCK_SECOND/4); 
+        Display_print0(hDisplayLcd, 1, 11, ".");
+        clock_wait(CLOCK_SECOND/4);
+        Display_print0(hDisplayLcd, 1, 12, ".");
+        clock_wait(CLOCK_SECOND/4);                                                                                                             
+  
         ctimer_set(&ct, NO_NET_LED_DURATION, publish_led_off, NULL);
         etimer_set(&et, ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC);
       }
     }
-
+    if((uip_ds6_get_global(ADDR_PREFERRED) != NULL) & (!cargada_cabecera)) {
+        Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+        cabecera_sensores_carga();
+        cargada_cabecera = 1;
+    } 
+    if(ev == PROCESS_EVENT_TIMER && etimer_expired(&etlimit)){
+        Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+        cabecera_sensores_carga();
+    }
     if(ev == PROCESS_EVENT_TIMER && etimer_expired(&echo_request_timer)) {
       if(uip_ds6_get_global(ADDR_PREFERRED) == NULL) {
         etimer_set(&echo_request_timer, ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC);
@@ -800,7 +850,12 @@ PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
         etimer_set(&echo_request_timer, alstom_mqtt_iot_config.def_rt_ping_interval);
       }
     }
-
+    /*
+    * "Handler" de eventos disparado por los sensores. Si se pulsa el botón por más de 5 segundos
+    * se restaurarán los valores por defecto. En caso de pulsar menos de 5 segundos, se hará 
+    * una lectura de los sensores y se envía un evento de publicación.
+    * Si salta otro evento de sensores se obtiene el valor del sensor que ha disparado el evento.
+    */
     if(ev == sensors_event && data == ALSTOM_MQTT_IOT_SENSOR_READING_TRIGGER) {
       if((ALSTOM_MQTT_IOT_SENSOR_READING_TRIGGER)->value(BUTTON_SENSOR_VALUE_DURATION) > CLOCK_SECOND * 5) {
         printf("Restoring defaults!\n");
@@ -817,8 +872,6 @@ PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
       get_hdc_reading();
     } else if(ev == sensors_event && data == &tmp_007_sensor) {
       get_tmp_reading();
-    } else if(ev == sensors_event && data == &mpu_9250_sensor) {
-      get_mpu_reading();
     }
 
     PROCESS_YIELD();

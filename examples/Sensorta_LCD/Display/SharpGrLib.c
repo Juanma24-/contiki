@@ -65,8 +65,6 @@
 #include <strings.h>
 #include "stdio.h"
 
-//#define DELAY_MS(i)    Task_sleep(((i) * 1000) / Clock_tickPeriod)
-//#define DELAY_US(i)    Task_sleep(((i) * 1) / Clock_tickPeriod)
 #define DELAY_MS(i)    clock_delay_usec(i*1000)
 #define DELAY_US(i)    clock_delay_usec(i)
 
@@ -118,12 +116,6 @@ uint8_t reverse(uint8_t x)
 //*****************************************************************************
 static void SharpGrLib_pixelDraw(tDisplay *pDisplay, int16_t lX, int16_t lY,uint16_t ulValue)
 {
-/*
-#ifdef NON_VOLATILE_MEMORY_BUFFER
-    PrepareMemoryWrite();
-#endif
-*/
-
     uint8_t *buf      = pDisplay->pvDisplayData;
     uint16_t usHeight = pDisplay->usHeight;
 
@@ -135,11 +127,6 @@ static void SharpGrLib_pixelDraw(tDisplay *pDisplay, int16_t lX, int16_t lY,uint
     {
         buf[lY * (usHeight >> 3) + (lX >> 3)] |= (0x80 >> (lX & 0x7));
     }
-/*
-#ifdef NON_VOLATILE_MEMORY_BUFFER
-    FinishMemoryWrite();
-#endif
-*/
 }
 
 //*****************************************************************************
@@ -177,11 +164,6 @@ static void SharpGrLib_drawMultiple(tDisplay *pDisplay, int16_t lX,
     uint16_t usHeight = pDisplay->usHeight;
     uint8_t *pData    = &buf[lY * (usHeight >> 3) + (lX >> 3)];
     uint16_t xj       = 0;
-/*
-#ifdef NON_VOLATILE_MEMORY_BUFFER
-    PrepareMemoryWrite();
-#endif
-*/
 
     //Write bytes of data to the display buffer
     for (xj = 0; xj < (lCount >> 3); xj++)
@@ -191,11 +173,6 @@ static void SharpGrLib_drawMultiple(tDisplay *pDisplay, int16_t lX,
 
     //Write last data byte to the display buffer
     *pData = (*pData & (0xFF >> (lCount & 0x7))) | *pucData;
-/*
-#ifdef NON_VOLATILE_MEMORY_BUFFER
-    FinishMemoryWrite();
-#endif
-*/
 }
 //*****************************************************************************
 //
@@ -223,11 +200,6 @@ static void SharpGrLib_lineDrawH(tDisplay *pDisplay, int16_t lX1, int16_t lX2,
     uint8_t *pucData, ucfirst_x_byte, uclast_x_byte;
     uint8_t *buf      = pDisplay->pvDisplayData;
     uint16_t usHeight = pDisplay->usHeight;
-/*
-#ifdef NON_VOLATILE_MEMORY_BUFFER
-    PrepareMemoryWrite();
-#endif
-*/
 
     //calculate first byte
     //mod by 8 and shift this # bits
@@ -293,11 +265,6 @@ static void SharpGrLib_lineDrawH(tDisplay *pDisplay, int16_t lX1, int16_t lX2,
             *pucData++ |= ucfirst_x_byte;
         }
     }
-/*
-#ifdef NON_VOLATILE_MEMORY_BUFFER
-    FinishMemoryWrite();
-#endif
-*/
 }
 
 
@@ -326,11 +293,6 @@ static void SharpGrLib_lineDrawV(tDisplay *pDisplay, int16_t lX, int16_t lY1,
     uint8_t  data_byte;
     uint8_t *buf      = pDisplay->pvDisplayData;
     uint16_t usHeight = pDisplay->usHeight;
-/*
-#ifdef NON_VOLATILE_MEMORY_BUFFER
-    PrepareMemoryWrite();
-#endif
-*/
 
     //calculate data byte
     //mod by 8 and shift this # bits
@@ -350,11 +312,6 @@ static void SharpGrLib_lineDrawV(tDisplay *pDisplay, int16_t lX, int16_t lY1,
             buf[yi * (usHeight >> 3) + x_index] |= data_byte;
         }
     }
-/*
-#ifdef NON_VOLATILE_MEMORY_BUFFER
-    FinishMemoryWrite();
-#endif
-*/
 }
 
 //*****************************************************************************
@@ -384,11 +341,6 @@ static void SharpGrLib_rectFill(tDisplay *pDisplay, const tRectangle *pRect,
     uint8_t *pucData, ucfirst_x_byte, uclast_x_byte;
     uint8_t *buf      = pDisplay->pvDisplayData;
     uint16_t usHeight = pDisplay->usHeight;
-/*
-#ifdef NON_VOLATILE_MEMORY_BUFFER
-    PrepareMemoryWrite();
-#endif
-*/
 
     //calculate first byte
     //mod by 8 and shift this # bits
@@ -459,11 +411,6 @@ static void SharpGrLib_rectFill(tDisplay *pDisplay, const tRectangle *pRect,
             *pucData++ |= ucfirst_x_byte;
         }
     }
-/*
-#ifdef NON_VOLATILE_MEMORY_BUFFER
-    FinishMemoryWrite();
-#endif
-*/
 }
 
 //*****************************************************************************
@@ -516,67 +463,33 @@ static void SharpGrLib_flush(tDisplay *pDisplay)
 
     uint8_t  command = SHARP_LCD_CMD_WRITE_LINE;
 
-    // Check if valid handles since this is a somewhat opaque API
-    /*
-    if (NULL == spiHandle || NULL == pinHandle)
-    {
-        return;
-    }
-    */
     //COM inversion bit
     command = command ^ VCOMbit;
 
-    //PIN_setOutputValue(pinHandle, csPinId, 1);
     GPIO_writeDio(csPinId, 1);
-    DELAY_US(10);
+    DELAY_US(100);
 
-    //spiTrans.txBuf = &command;
-    //spiTrans.count = 1;
-    //SPI_transfer(spiHandle, &spiTrans);
 
-    bool trans = board_spi_write(&command, sizeof(&command));
-    if(!trans){
-        printf("Error. Trasnmisión SPI no realizada\n");
-        return;
-    }
+    board_spi_write(&command, sizeof(command));
+    
     flagSendToggleVCOMCommand = SHARP_SKIP_TOGGLE_VCOM_COMMAND;
+
 #ifdef LANDSCAPE
     for (xj = 0; xj < pDisplay->usHeight; xj++)
     {
         command = reverse(xj + 1);
 
-        //spiTrans.txBuf = &command;
-        //spiTrans.count = 1;
-        //SPI_transfer(spiHandle, &spiTrans);
-        //board_spi_write(&command, strlen[&command]);
-        trans = board_spi_write(&command, sizeof(&command));
-        if(!trans){
-            printf("Error. Trasnmisión SPI no realizada\n");
-            return;
-        }
-        //spiTrans.txBuf = pucData;
-        //spiTrans.count = (pDisplay->usWidth >> 3);
-        //SPI_transfer(spiHandle, &spiTrans);
-        //board_spi_write(&pucData, strlen[&pucData]);
-        trans = board_spi_write(pucData, (pDisplay->usWidth >> 3));
-        if(!trans){
-            printf("Error. Trasnmisión SPI no realizada\n");
-            return;
-        }
+        board_spi_write(&command, sizeof(command));
+        
+        board_spi_write(pucData, (pDisplay->usWidth >> 3));
+        
         pucData += (pDisplay->usWidth >> 3);
 
 
         command = SHARP_LCD_TRAILER_BYTE;
 
-        //spiTrans.txBuf = &command;
-        //spiTrans.count = 1;
-        //SPI_transfer(spiHandle, &spiTrans);
-        //board_spi_write(&command, strlen[&command]);
-        trans = board_spi_write(&command, sizeof(&command));
-        if(!trans){
-            printf("Error. Trasnmisión SPI no realizada\n");
-        return;
-    }
+        board_spi_write(&command, sizeof(command));
+        
     }
 #endif
 
@@ -586,47 +499,26 @@ static void SharpGrLib_flush(tDisplay *pDisplay)
     for (xj = 1; xj <= pDisplay->usHeight; xj++)
     {
         command        = reverse(xj);
-        //spiTrans.txBuf = &command;
-        //spiTrans.count = 1;
-        //SPI_transfer(spiHandle, &spiTrans)
+        board_spi_write(&command, sizeof(&command));
         
-        trans = board_spi_write(&command, sizeof(&command));
-        if(!trans){
-            printf("Error. Trasnmisión SPI no realizada\n");
-            return;
-        }
 
-        //spiTrans.txBuf = pucData;
-        //spiTrans.count = (pDisplay->usWidth >> 3);
-        //SPI_transfer(spiHandle, &spiTrans);
-        trans = board_spi_write(pucData, (pDisplay->usWidth >> 3));
-        if(!trans){
-            printf("Error. Trasnmisión SPI no realizada\n");
-            return;
-        }
+        board_spi_write(pucData, (pDisplay->usWidth >> 3));
+        
         pucData += (pDisplay->usWidth >> 3);
 
         command        = SHARP_LCD_TRAILER_BYTE;
-        //spiTrans.txBuf = &command;
-        //spiTrans.count = 1;
-        //SPI_transfer(spiHandle, &spiTrans);
+
         board_spi_write(&command, 1);
     }
 #endif
 
     command        = SHARP_LCD_TRAILER_BYTE;
-    //spiTrans.txBuf = &command;
-    //spiTrans.count = 1;
-    //SPI_transfer(spiHandle, &spiTrans);
-    trans = board_spi_write(&command, sizeof(&command));
-    if(!trans){
-        printf("Error. Trasnmisión SPI no realizada\n");
-        return;
-    }
+
+    board_spi_write(&command, sizeof(command));
 
 
     // Wait for last byte to be sent, then drop SCS
-    DELAY_US(10);
+    DELAY_US(100);
 
     //PIN_setOutputValue(pinHandle, csPinId, 0);
     GPIO_writeDio(csPinId, 0);
@@ -648,13 +540,6 @@ static void SharpGrLib_flush(tDisplay *pDisplay)
 //*****************************************************************************
 static void SharpGrLib_clearScreen(tDisplay *pDisplay, uint16_t ulValue)
 {
-    // Check if valid handles since this is a somewhat opaque API
-    /*
-    if (NULL == spiHandle || NULL == pinHandle)
-    {
-        return;
-    }
-    */
 
     //clear screen mode(0X100000b)
     uint8_t command = SHARP_LCD_CMD_CLEAR_SCREEN;
@@ -664,32 +549,16 @@ static void SharpGrLib_clearScreen(tDisplay *pDisplay, uint16_t ulValue)
 
     //PIN_setOutputValue(pinHandle, csPinId, 1);
     GPIO_writeDio(csPinId, 1);
-    DELAY_US(10);
+    DELAY_US(100);
 
-    //spiTrans.txBuf = &command;
-    //spiTrans.count = 1;
-    //SPI_transfer(spiHandle, &spiTrans);
-
-    bool trans=board_spi_write(&command, sizeof(&command));
-    if(!trans){
-        printf("Error. Trasnmisión SPI no realizada\n");
-        return;
-    }
+    board_spi_write(&command, sizeof(command));
 
     flagSendToggleVCOMCommand = SHARP_SKIP_TOGGLE_VCOM_COMMAND;
     command = SHARP_LCD_TRAILER_BYTE;
 
-    //spiTrans.txBuf = &command;
-    //spiTrans.count = 1;
-    //SPI_transfer(spiHandle, &spiTrans);
-    trans = board_spi_write(&command, sizeof(&command));
-    if(!trans){
-        printf("Error. Trasnmisón SPI no realizada\n");
-        return;
-    }
-
-    DELAY_US(10);
-    //PIN_setOutputValue(pinHandle, csPinId, 0);
+    board_spi_write(&command, sizeof(command));
+    
+    DELAY_US(100);
     GPIO_writeDio(csPinId, 0);
 
     if (ClrBlack == ulValue)
@@ -710,13 +579,7 @@ static void SharpGrLib_clearScreen(tDisplay *pDisplay, uint16_t ulValue)
 //*****************************************************************************
 void SharpGrLib_sendToggleVCOMCommand()
 {
-    // Check if valid handles since this is a somewhat opaque API
-    /*
-    if (NULL == spiHandle || NULL == pinHandle)
-    {
-        return;
-    }
-    */
+
     VCOMbit ^= SHARP_VCOM_TOGGLE_BIT;
 
     if (SHARP_SEND_TOGGLE_VCOM_COMMAND == flagSendToggleVCOMCommand)
@@ -727,31 +590,19 @@ void SharpGrLib_sendToggleVCOMCommand()
         command[0] = command[0] ^ VCOMbit;
 
         // Assert chip select
-        //PIN_setOutputValue(pinHandle, csPinId, 1);
         GPIO_writeDio(csPinId, 1);
-        DELAY_US(10);
+        DELAY_US(100);
 
-        //spiTrans.txBuf = command;
-        //spiTrans.count = 2;
-        //SPI_transfer(spiHandle, &spiTrans);
-        bool trans=board_spi_write(&command[0], sizeof(&command[0]));
-        if(!trans){
-            printf("Error. Trasnmisón SPI no realizada\n");
-            return;
-        }
-        trans=board_spi_write(&command[1], sizeof(&command[1]));
-        if(!trans){
-            printf("Error. Trasnmisón SPI no realizada\n");
-            return;
-        }
-
+        board_spi_write(&command[0], sizeof(command[0]));
+        
+        board_spi_write(&command[1], sizeof(command[1]));
+        
         // Wait for last byte to be sent, then drop SCS
 
         // Ensure a 2us min delay to meet the LCD's thSCS
-        DELAY_US(10);
+        DELAY_US(100);
 
         // Release chip select
-        //PIN_setOutputValue(pinHandle, csPinId, 0);
         GPIO_writeDio(csPinId, 0);
     }
 

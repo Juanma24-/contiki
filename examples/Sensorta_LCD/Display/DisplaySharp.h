@@ -81,14 +81,9 @@ typedef struct
 
 typedef struct DisplaySharp_HWAttrs
 {
-    uint32_t spiIndex;
-    //PIN_Id   csPin;
     uint8_t   csPin;
-    //PIN_Id   extcominPin;
     uint8_t   extcominPin;
-    //PIN_Id   powerPin;
     uint8_t   powerPin;
-    //PIN_Id   enablePin;
     uint8_t   enablePin;
     uint16_t pixelHeight;
     uint16_t pixelWidth;

@@ -62,7 +62,7 @@
  * IPv4 son mapeadas a direcciones IPv6. La conversion se puede realizar facilmente
  * con alguna herramienta web como: https://www.ultratools.com/tools/ipv4toipv6
  */
-/* Dorección IP local del Broker Mosquitto ubicado en Laptop */
+/* Dirección IP local del Broker Mosquitto ubicado en Laptop */
 
 static const char *broker_ip = "0000:0000:0000:0000:0000:ffff:c0a8:012f";
 /*---------------------------------------------------------------------------*/
@@ -110,33 +110,36 @@ static uint8_t state;
 /*---------------------------------------------------------------------------*/
 /*
  * Buffers for Client ID and Topic.
- * Make sure they are large enough to hold the entire respective string
- *
- * En este caso se utilizarán dos tipos de topics; Actuación y Configuración.
- * Cada topic de actuación lleva ligado uno de configuración y puede haber
- * tantos como se precise.
- *  ACTUACION:
- *              A01/Material/leds
- *  CONFIGURACION
- *              A01/d:00124bXXXXXX/Conf
- *  PUBLICACION
- *              A01/client_id/status/fmt/json
- *
- * We also need space for the null termination
+ * Make sure they are large enough to hold the entire respective string. 
+ * Asegurar que son lo suficiente largos para contener a su stirng. 
+ * Tener en cuenta que el string termina siempre con el carácter ("/0").
+ *  
  */
 #define CONFIG_FLASH_OFFSET        0
 #define CONFIG_MAGIC      0xCC265002
 
 #define BUFFER_SIZE 64
-static char client_id[BUFFER_SIZE];
+
+/*Topic de publicación de sensórica*/
 static char pub_topic[BUFFER_SIZE];
+/*Topic de publicación de alarmas*/
 static char alarm_topic[BUFFER_SIZE];
+/*Topic publicación de info sensores*/
 static char info_topic[BUFFER_SIZE];
+/*Subscripción a un material concreto*/
 static char sub_topic_Act[BUFFER_SIZE];
+/*Subscripción al topic de configuración de material*/
 static char sub_topic_ConfA[BUFFER_SIZE];
+/*Subscripción a los topics de configuración de los datos a publicar*/
 static char sub_topic_ConfP[BUFFER_SIZE];
+/*Subscripicón al Update de información*/
 static char sub_topic_Info[BUFFER_SIZE];
 
+/*--------------------------------------------------------------------------*/
+/*
+*	Variables locales
+*/
+static char client_id[BUFFER_SIZE];
 static uint8_t *alarmOnp;
 static uint8_t alarmOn=10;
 static uint8_t Info=0;
@@ -162,12 +165,13 @@ static uip_ip6addr_t def_route;
 extern int def_rt_rssi;
 /*---------------------------------------------------------------------------*/
 /* 
- * Lista con todos los valores de lecturas de los sensores. Para este caso solo
- * se tiene el valor de temperatura y voltaje de la batería.
+ * Lista con todos los valores necesarios de los sensores.
 */
 static alstom_mqtt_iot_sensor_reading_t *reading;
 /*---------------------------------------------------------------------------*/
+/*Estructura con los datos a guardar/cargar de los sensores*/
 mqtt_client_config_t *conf;
+/*Estructura con el material al que está subscripto el Sensortag */
 mqtt_client_config_t config_k;
 /*---------------------------------------------------------------------------*/
 /* 
@@ -193,11 +197,16 @@ MQTT_CONFIG(conf,"0000:0000:0000:0000:0000:ffff:c0a8:012f");
 PROCESS(mqtt_client_process, "CC26XX MQTT Client");
 /*---------------------------------------------------------------------------*/
 static void
-publish_led_off(void *d)                                                                  //APAGA EL LED
+publish_led_off(void *d)                                                                  
 {
   leds_off(ALSTOM_MQTT_IOT_STATUS_LED);
 }
 /*---------------------------------------------------------------------------*/
+/*
+*   Carga la configuración de la conexión mqtt guardada en la memoria FLASH
+*   en el dispositivo. Muy importante para recuperar la conexión de material
+*   tras apagado o reinicio.
+*/ 
 static void
 load_mqtt_config()
 {
@@ -232,6 +241,9 @@ load_mqtt_config()
     }
 }
 /*---------------------------------------------------------------------------*/
+/*
+*   Guarda la configuración de la conexión mqtt en la memoria FLASH.
+*/
 void
 save_mqtt_config()
 {
@@ -267,12 +279,11 @@ save_mqtt_config()
 }
 /*---------------------------------------------------------------------------*/
 /*
-* Handler de la subcripción a Actuaciónes. Será disparado cuando se envíe un mensaje
-* binario (1/0) a un topic de actuación al que el dispositivo esté ligado. En este
+* Handler de la subcripción a Actuaciones. Será disparado cuando se envíe un mensaje
+* binario (1/0) a un topic de actuación al que el dispositivo esté subscrito. En este
 * handler se comprueba que el topic es el correcto y en caso afirmativo se enciende
-* el LED rojo. 
-* Este handler gestionará todas las actuaciones por muchas operaciones a las que se 
-* ligue el dispositivo. Es muy importante tener en cuenta las longitudes de los topics
+* el LED rojo o el buzz (dependiendo el topic recibido). 
+* Es muy importante tener en cuenta las longitudes de los topics
 * ya que si se falla en ese punto el dipositivo no responderá a las ordenes externas.
 */
 static void
@@ -304,8 +315,8 @@ pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
     printf("Incorrect format\n");
     return;
   }
-  /*Comprueba que el topic termina en leds, es una medida evitable, pero importante si 
-  se introducen más topics por operación */
+  /*Comprueba que el topic termina en leds importante si 
+  se introducen más de un topic de actuación */
   if(strncmp(&topic[topic_len - 4], "leds", 4) == 0) {
     if(chunk[0] == '1') {
       leds_on(LEDS_RED);
@@ -314,6 +325,8 @@ pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
     }
     return;
   }
+  /*Comprueba que el topic termina en leds importante si 
+  se introducen más de un topic de actuación */
   if(strncmp(&topic[topic_len - 4], "buzz", 4) == 0) {
     if(chunk[0] == '1') {
       buzzer_start(1000);
@@ -325,10 +338,9 @@ pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
 }
 /*---------------------------------------------------------------------------*/
 /*
-* Handler de la subcripción a Configuración. Habrá tantas subscripciones a configuraciones
-* como a actuaciones, ya que cada actuación debe poder ser modificada dinámicamente. Cada topic
-* de configuración lleva asigado un número por lo que es importante tener un registro externo 
-* de las configuracion del dispositivo para poder cambiar una antigua por otra nueva sin fallos. 
+* Handler de la subcripción a Configuración del Material al que está subscrito el 
+* Sensortag. Este topic permite modificar dinámicamente esa subscripción. Si es cambiada 
+* el Sensortag es reiniciado para adpatarse a la modificación.
 */
 static void
 pub_handler_ConfA(const char *topic, uint16_t topic_len, const uint8_t *chunk,
@@ -346,15 +358,17 @@ pub_handler_ConfA(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   }
 
   /* Se comprueba si el mensaje iba para este Sensortag comprobando que coinciden los client_ID*/ 
-  if(strncmp(&topic[4], client_id, 14) != 0) {				//Si las cadenas no son iguales
+  if(strncmp(&topic[4], client_id, 14) != 0) {	
     printf("Incorrect format\n");
     return;
   }
   /*SEGURIDAD:se comprueba que el topic termina en Conf. Permite añadir topics en el mismo nivel*/
   if(strncmp(&topic[topic_len - 4],"Conf",4) == 0){
   	   for(i=0;i<chunk_len;i++){
+  	   		/* Actualiza el material*/
   		    conf->material[i] = chunk[i];
   	   }
+  	   /*Guarda la configuración en FLASH y reinicia la conexión*/
        save_mqtt_config();
   	   state = MQTT_CLIENT_STATE_NEWCONFIG;
        mqtt_disconnect(&conn);
@@ -421,29 +435,30 @@ pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
     printf("Incorrect format\n");
     return;
   }
-  /*SEGURIDAD:se comprueba que el topic termina en Conf. Permite añadir topics en el mismo nivel*/
+  /*Modificación de la PUBLICACIÓN.*/
   if(strncmp(&topic[topic_len - 3],"Pub",3) == 0){
-     for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
-        if(strncmp(&topic[topic_len - 4 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
+     for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {										//Recorre la lista de sensores
+        if(strncmp(&topic[topic_len - 4 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){		//Si coincide el campo form_field
           DBG("Match en sensor\n");
-          if(chunk[0] == '0') {
-            reading->publish = 0;
-            snprintf(reading->converted, ALSTOM_MQTT_IOT_CONVERTED_LEN, "\"N/A\"");
+          if(chunk[0] == '0') {																										//Si se ha mandado un 0
+            reading->publish = 0;																									//Se desactiva la propiedad Publish
+            snprintf(reading->converted, ALSTOM_MQTT_IOT_CONVERTED_LEN, "\"N/A\"");												    //Se modifica la propiedad Converted
             DBG("Desactivada publicación de %s\n",reading->form_field);
-            save_config();
+            save_config();																											//Se guarda la nueva configuración en FLASH
             return;
-          } else if(chunk[0] == '1') {
-            reading->publish = 1;
-            init_sensor_readings();
+          } else if(chunk[0] == '1') {																								//Si se ha mandado un 1
+            reading->publish = 1;																									//Se activa la propiedad Publish
+            init_sensor_readings();																									//Inicia las lecturas (Activa la nueva configuración)
             DBG("Activada publicación de %s\n",reading->form_field);
-            save_config();
-            process_poll(&mqtt_client_process);
+            save_config();																											//Se guarda la nueva configuración en FLASH
+            process_poll(&mqtt_client_process);																						//Se envía un evento al proceso mqtt (state_machine activa<)
             return;
           }
         }   
       }
       return;
   }
+  /*Modificación del INTERVALO.*/
   if(strncmp(&topic[topic_len - 3],"Int",3) == 0){
      for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
         if(strncmp(&topic[topic_len - 4 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
@@ -457,6 +472,7 @@ pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
       }
       return;
   }
+  /*Modificación del LÍMITE.*/
   if(strncmp(&topic[topic_len - 3],"Lim",3) == 0){
      for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
         if(strncmp(&topic[topic_len - 4 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
@@ -468,6 +484,7 @@ pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
       }
       return;
   }
+  /*Modificación de los LÍMITES ACTIVOS*/
   if(strncmp(&topic[topic_len - 5],"LimOn",5) == 0){
      for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
         if(strncmp(&topic[topic_len - 6 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
@@ -528,7 +545,7 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
           msg_ptr->topic, msg_ptr->payload_length);
     }
     /* 
-    * Topics de actuación (longitud==14)
+    * Topics de Actuación (longitud==14)
     */
     if(strlen(msg_ptr->topic) == 14){
     	pub_handler_Act(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
@@ -545,7 +562,7 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
       }
     }
     /*
-    * Topics de configuracion de publicación de datos de sensores. Longitud Variable
+    * Topics de Configuracion de publicación de datos de sensores. Longitud Variable
     */
     if(strlen(msg_ptr->topic) > 27){
       pub_handler_ConfP(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
@@ -581,8 +598,8 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
 }
 /*---------------------------------------------------------------------------*/
 /*
-* Construye el topic de publicación a partir de los datos del dispositivo
-* y el formato impuesto. Este topic debe estar reservado al comienzo del
+* Construye los topic de publicación a partir de los datos del dispositivo
+* y el formato impuesto. Estos topics deben estar reservados al comienzo del
 * código en este archivo.
 */
 static int
@@ -617,13 +634,10 @@ construct_pub_topic(void)
 /*---------------------------------------------------------------------------*/
 /*
 * Construye los topics de subscripción a partir de los datos del dispositivo
-* y el formato impuesto. Crea varios de ellos. Es necesario que estos topics
-* hayan sido reservados al comienzo del código en este archivo. 
-* Los topics de actuación son creados explicitamente en el numero necesario. Podría
-* haberse utilizado el comando "+" pero en ese caso actuaría ante cada orden que 
-* fuera a cada Sensortag, con el consecuente gasto de recursos y batería.
-* En cambio los topics de configuracion son reservados con el comando "+" ya que 
-* ya vienen filtrados por el Id del cliente. 
+* y el formato impuesto. Es necesario que estos topics
+* hayan sido reservados al comienzo del código en este archivo. Dónde ha sido 
+* posible se ha utilizado el comando "+" para hacer más fácil y rápido el 
+* proceso de subscripción. 
 */
 static int
 construct_sub_topic(void)
@@ -661,8 +675,10 @@ construct_sub_topic(void)
 }
 /*---------------------------------------------------------------------------*/
 /*
-* CONSTRUYE EL CLIENT_ID A PARTIR DE LA DIRECCION MAC (DEVICE_ID) SEGÚN EL FORMATO
+* Construye el Client-id a partir de la dirección MAC (DEVICE_ID) según el formato
 * d:<Device_ID>, SIMPLIFICADO DE d:<ORG_ID>:<Type_ID>:<Device_ID>
+* El client-id tiene una longitud de 14 caracteres pero solo los últimos 6 distinguen
+* a un Sensortag de otro, pudiendo tener como máximo 999999 de dispositivos.
 */
 static int
 construct_client_id(void)                                                                 
@@ -682,9 +698,9 @@ construct_client_id(void)
 }
 /*---------------------------------------------------------------------------*/
 /* 
-* ACTUALIZA LA INFORMACION SOBRE LOS TOPIC SUBSCRITOS Y DE PUBLICACIÓN,
-* ESTA FUNCIÓN ES ACTIVADA DESDE LA MÁQUINA DE ESTADOS, NO SE DEBE REALIZAR 
-* UNA LLAMADA DIRECTA.
+* Actualiza la información sobre los topics subscritos y de publiación.
+* Esta función es activada desde la máquina de estados, no se debe hacer una 
+* llamada directa.
 */
 static void
 update_config(void)
@@ -729,8 +745,9 @@ update_config(void)
 }
 /*---------------------------------------------------------------------------*/
 /*
-* INICIA CONFIGURACIÓN, COPIA TODAS LAS CONSTANTES EN LA ESTRUCUTURA CONF
-* LAS LONGITUDES TIENEN QUE SER AJUSTADAS SI SE MODIFICA ALGUNO DE LOS PARÁMETROS.
+* Inicia la configuración por defecto, copia todas las constantes en una estructura 
+* mqtt_client_config_t.
+* Las longitudes deben ser revisadas si se modifica alguna de las constantes.
 */
 static int
 init_config()
@@ -753,8 +770,8 @@ init_config()
 
 /*---------------------------------------------------------------------------*/
 /*
-* Realiza las subcripciones a los topics de actuación y configuracion. Las
-* subscripciones deben ser llevadas a cabo una tras la finalización de la 
+* Realiza las subcripciones a los topics de actuación, configuracion e información.
+* Las subscripciones deben ser llevadas a cabo una tras la finalización de la 
 * anterior por lo que la bandera permite la subscripción en el momento
 * adecuado evitando el llenado de la cola (la no subscripcion).
 * IMPORTANTE: NIVEL DE QoS == 1 
@@ -803,9 +820,10 @@ subscribe()
 }
 /*---------------------------------------------------------------------------*/
 /*
-* Publica en el broker según el topic de publicación. En este caso solo publica los datos
-* refrentes al dispositivo y los datos de temperatura y voltaje de la batería. Unicos
-* valores de la lista reading.
+* Publica en el broker los valores de los sensores que han sido activados.
+* Para conocer cuál es el intervalo de publicación obtiene el valor mínimo
+* de los intervalos de publicación de aquellos sensores que están activos.
+* La publicación se realiza en formato JSON.
 */
 static void
 publish(void)
@@ -972,8 +990,9 @@ publish_info(void)
 }
 /*---------------------------------------------------------------------------*/
 /*
-* Publica una alram si algún sensor ha superado el valor limite impuesto. 
-* También salta la alarma si se pulsa el boton para apagar el led.
+* Publica una alarma si algún sensor ha superado el valor limite impuesto. 
+* También salta la alarma si se pulsa el boton para apagar el led. El texto 
+* enviado es distinto dependiendo la alarma que ha sido activada.
 */
 static void
 alarm(uint8_t type)
@@ -1064,7 +1083,7 @@ alarm(uint8_t type)
     }
 
     default:{
-      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"No se ha podido determianr motivo\"");
+      len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"No se ha podido determinar motivo\"");
       break;
     }
   }
@@ -1090,7 +1109,7 @@ alarm(uint8_t type)
 /*---------------------------------------------------------------------------*/
 
 /*
-* SE CONECTA AL BROKER, NECESARIO LA DIRECCIÓN IP Y EL PUERTO
+* Se conecta al broker. Necesaria la dirección IP y el puerto.
 */
 static void
 connect_to_broker(void)                                                                   
@@ -1104,7 +1123,7 @@ connect_to_broker(void)
 /*---------------------------------------------------------------------------*/
 /*
 * Maquina de estados que gestiona las conexiones, subscripciones y pubilcaciones del
-* cliente. Es disparada mediante el proceso pricncipal.
+* cliente. Es disparada mediante el proceso principal.
 */
 static void
 state_machine(void)
@@ -1317,14 +1336,14 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
   PROCESS_BEGIN();
 
   printf("CC26XX MQTT Client Process\n");
-  conf = &alstom_mqtt_iot_config.mqtt_config;          //Carga la configuración 
-  if(init_config() != 1) {                             //Ejecuta init_config, cargando la estructura de configuración del cliente
+  conf = &alstom_mqtt_iot_config.mqtt_config;          	//Carga la configuración 
+  if(init_config() != 1) {                             	//Ejecuta init_config, cargando la estructura de configuración del cliente
     PROCESS_EXIT();
   }
 
-  load_mqtt_config();
+  load_mqtt_config();									//Carga la configuración sobre el material al que estaba suscrito el Sensortag
 
-  update_config();                                    //Actualiza, cargando el cliente_ID y los topics de subscripcion y publicacion 
+  update_config();                                    	//Actualiza, cargando el cliente_ID y los topics de subscripcion y publicacion 
 
   /* Main loop */
   while(1) {

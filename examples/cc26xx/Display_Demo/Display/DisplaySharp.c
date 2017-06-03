@@ -38,7 +38,6 @@
 #include <driverlib/ioc.h>
 #include <driverlib/gpio.h>
 #include <common/board-spi.h>
-#include <dev/leds.h>
 
 #include <Display/grlib.h>
 #include <Display/Display.h>
@@ -149,20 +148,6 @@ Display_Handle DisplaySharp_open(Display_Handle hDisplay,Display_Params *params)
     object->displayColor.bg = ClrBlack;
     object->displayColor.fg = ClrWhite;
 
-    /*
-    * Acceso exclusivo, se inicia el semáforo a uno (será binario)
-    */
-    //PT_SEM_INIT(&mutex,  1);
-
-
-    
-    /*
-    *   Se espera hasta que el semáforo está disponible. Debe de estarlo al haber 
-    *   sido creado en esta función y es la primera línea ejecutada tras dicha 
-    *   creación.
-    */
-    //PT_SEM_WAIT(pt, &mutex);
-
     // Initialize the GrLib back-end transport
     SharpGrLib_init(hwAttrs->csPin);
 
@@ -185,12 +170,6 @@ Display_Handle DisplaySharp_open(Display_Handle hDisplay,Display_Params *params)
     GrClearDisplay(&object->g_sContext);
     GrFlush(&object->g_sContext);
 
-    // Release LCD
-    /*
-    *   Se libera la pantalla al enviar una señal al semáforo.
-    */
-    //PT_SEM_SIGNAL(pt,&mutex);
-
     return hDisplay;
 }
 
@@ -208,12 +187,9 @@ void DisplaySharp_clear(Display_Handle hDisplay)
 {
     DisplaySharp_Object *object = (DisplaySharp_Object  *)hDisplay->object;
     
-    //PT_SEM_WAIT(pt,&mutex);
-
     GrClearDisplay(&object->g_sContext);
     GrFlush(&object->g_sContext);
 
-    //PT_SEM_SIGNAL(pt,&mutex);
 }
 
 
@@ -274,8 +250,6 @@ void DisplaySharp_put5(Display_Handle hDisplay, uint8_t line,
 
     char    dispStr[23];
 
-    // Grab LCD
-    //PT_SEM_WAIT(pt,&mutex);
         xp          = column * object->g_sContext.pFont->ucMaxWidth + 1;
         yp          = line * object->g_sContext.pFont->ucHeight + 0;
         clearStartX = clearEndX = xp;
@@ -317,8 +291,6 @@ void DisplaySharp_put5(Display_Handle hDisplay, uint8_t line,
         GrStringDraw(&object->g_sContext,dispStr,AUTO_STRING_LENGTH,xp,yp,OPAQUE_TEXT);
         GrFlush(&object->g_sContext);
 
-        // Release LCD
-    //PT_SEM_SIGNAL(pt,&mutex);
 }
 
 
@@ -335,11 +307,7 @@ void DisplaySharp_close(Display_Handle hDisplay)
 {
     DisplaySharp_HWAttrs *hwAttrs = (DisplaySharp_HWAttrs *)hDisplay->hwAttrs;
 
-
-    // Grab LCD
-     //PT_SEM_WAIT(pt,&mutex);
         // Turn off the display
-        //PIN_setOutputValue(object->hPins, hwAttrs->enablePin, 0);
         if (hwAttrs->enablePin != PIN_TERMINATE){
             GPIO_writeDio(hwAttrs->enablePin, 0);
         }
@@ -362,9 +330,6 @@ void DisplaySharp_close(Display_Handle hDisplay)
         SharpGrLib_init(PIN_UNASSIGNED);
 
         // Release LCD
-        //Semaphore_post((Semaphore_Handle) & object->semLCD);
-    //PT_SEM_SIGNAL(pt,&mutex);
-    
 }
 
 /*!
@@ -395,38 +360,25 @@ int DisplaySharp_control(Display_Handle hDisplay, unsigned int cmd, void *arg)
     switch(cmd)
     {
         case DISPLAY_CMD_TRANSPORT_CLOSE:
-            // Grab LCD
-                //PT_SEM_WAIT(pt,&mutex);
                     // Close SPI and tell back-end there is no SPI
                     board_spi_close();
                     SharpGrLib_init(hwAttrs->csPin);
                     ret = DISPLAY_STATUS_SUCCESS;
-                // Release LCD
-                //PT_SEM_SIGNAL(pt,&mutex);
             break;
 
         case DISPLAY_CMD_TRANSPORT_OPEN:
-            // Grab LCD
-                //PT_SEM_WAIT(pt,&mutex);
                     // Re-open SPI and re-init back-end
                     board_spi_open(4000000, BOARD_IOID_SPI_SCK);
                     SharpGrLib_init(hwAttrs->csPin);
                     ret = DISPLAY_STATUS_SUCCESS;
-                // Release LCD
-                //PT_SEM_SIGNAL(pt,&mutex);
-            //}
             break;
 
         case DISPLAYSHARP_CMD_SET_COLORS:
-            // Grab LCD
-                //PT_SEM_WAIT(pt,&mutex);
+
                 object->displayColor = *(DisplaySharpColor_t *)arg;
 
                 GrContextForegroundSet(&object->g_sContext, object->displayColor.fg);
                 GrContextBackgroundSet(&object->g_sContext, object->displayColor.bg);
-
-                // Release LCD
-                //PT_SEM_SIGNAL(pt,&mutex);
                 // Return success
                 ret = DISPLAY_STATUS_SUCCESS;
             break;

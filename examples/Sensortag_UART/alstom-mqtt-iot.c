@@ -28,11 +28,11 @@
  * OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 /**
- * \addtogroup cc26xx-web-demo
+ * \addtogroup ALSTOM-MQTT-IOT
  * @{
  *
  * \file
- *   Main module for the CC26XX web demo. Activates on-device resources,
+ *   Main module for the ALSTOM-MQTT-IOT. Activates on-device resources,
  *   takes sensor readings periodically and caches them for all other modules
  *   to use.
  */
@@ -53,7 +53,7 @@
 #include <string.h>
 /*---------------------------------------------------------------------------*/
 PROCESS_NAME(cetic_6lbr_client_process);
-PROCESS(alstom_mqtt_iot_process, "CC26XX Web Demo");
+PROCESS(alstom_mqtt_iot_process, "ALSTOM-MQTT-IOT");
 /*---------------------------------------------------------------------------*/
 /*
  * Update sensor readings in a staggered fashion every SENSOR_READING_PERIOD
@@ -97,7 +97,7 @@ LIST(sensor_list);
 * Es muy importante el campo form_field ya que es parte del topic de llamada
 * para publicación y para cambiar el intervalo de publicación en cada uno de 
 * los sensores.
-* Aquellos campos de la estrcutura que no son nombrados en la macro, se 
+* Aquellos campos de la estructura que no son nombrados en la macro, se 
 * inicializan a 0 o NULL.
 */
 #define DEMO_SENSOR(name, type, descr, xml_element, form_field, units,limit) \
@@ -127,6 +127,9 @@ publish_led_off(void *d)
   leds_off(ALSTOM_MQTT_IOT_STATUS_LED);
 }
 /*---------------------------------------------------------------------------*/
+/*
+*	Guarda la configuración de los sensores en la memoria FLASH.
+*/
 void
 save_config()
 {
@@ -173,6 +176,9 @@ save_config()
 
 }
 /*---------------------------------------------------------------------------*/
+/*
+*	Carga la configuración de los sensores desde memoria FLASH.
+*/
 static void
 load_config()
 {
@@ -316,6 +322,11 @@ ping_parent(void)
                  ALSTOM_MQTT_IOT_ECHO_REQ_PAYLOAD_LEN);
 }
 /*---------------------------------------------------------------------------*/
+/*
+*
+*=================== OBTENCIÓN VALORES DE LOS SENSORES ======================
+*
+*/
 static void
 get_batmon_reading(void *data)
 {
@@ -640,7 +651,7 @@ init_sensor_readings(void)
 }
 /*---------------------------------------------------------------------------*/
 /*
-* Añade a la lista de sensores todos las estructuras de los sensores a medir.
+* Añade a la lista de sensores todas las estructuras de los sensores a medir.
 * Si un sensor no es añadido a esta lista, no podrá ser referenciado externamente,
 * solo de forma directa con una llamada a su estructura, esto impediría la 
 * publicación desde mqtt_client.c 
@@ -670,9 +681,8 @@ PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
 
   printf("ALSTOM MQTT IoT Process\n");
 
-  
-  init_sensors();                                                                                                                   
-                                                                                                                                    
+  init_sensors(); 
+                                                                                                                                      
   alstom_mqtt_iot_publish_event = process_alloc_event();
   alstom_mqtt_iot_config_loaded_event = process_alloc_event();
   alstom_mqtt_iot_load_config_defaults = process_alloc_event();
@@ -695,12 +705,7 @@ PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
   process_post(PROCESS_BROADCAST, alstom_mqtt_iot_config_loaded_event, NULL);
 
   init_sensor_readings();
-  /*
-  * Prueba de inicio pantalla LCD 
   
-  LCD_init();
-  
-  */
   def_rt_rssi = 0x8000000;
   uip_icmp6_echo_reply_callback_add(&echo_reply_notification,echo_reply_handler);
   etimer_set(&echo_request_timer, ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC);

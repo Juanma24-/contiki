@@ -46,6 +46,9 @@
 #include "mqtt-client.h"
 
 #include <stdint.h>
+#include <Display/Display.h>
+#include <Display/DisplayExt.h>
+
 
 /*---------------------------------------------------------------------------*/
 /* Active probing of RSSI from our preferred parent */
@@ -73,7 +76,7 @@
 /*---------------------------------------------------------------------------*/
 /* Default configuration values */
 #define ALSTOM_MQTT_IOT_DEFAULT_USERNAME_ID         "User"
-#define ALSTOM_MQTT_IOT_DEFAULT_AUTH_TOKEN			    "Pass"
+#define ALSTOM_MQTT_IOT_DEFAULT_AUTH_TOKEN			"Pass"
 #define ALSTOM_MQTT_IOT_DEFAULT_EVENT_TYPE_ID       "status"
 #define ALSTOM_MQTT_IOT_DEFAULT_SUBSCRIBE_CMD_TYPE  "+"
 #define ALSTOM_MQTT_IOT_DEFAULT_SALA                "A01"
@@ -209,6 +212,12 @@ void compare_and_update(alstom_mqtt_iot_sensor_reading_t *reading);
  * \brief Guarda la configuración en la memoria Flash externa.
  */
 void save_config();
+
+/**
+ * \brief Obtiene un puntero al handle de la pantalla LCD.
+ * \return Puntero al handle de la LCD. 
+ */
+Display_Handle* getDisplay_handle(void);
 /*---------------------------------------------------------------------------*/
 #endif /* ASLTOM_MQTT_IOT_H_ */
 /*---------------------------------------------------------------------------*/
