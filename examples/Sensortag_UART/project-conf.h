@@ -40,7 +40,7 @@
 #define ROM_BOOTLOADER_ENABLE                 1
 #define BUTTON_SENSOR_CONF_ENABLE_SHUTDOWN    1
 /* Si hay pantalla para visualizar los datos, se apaga la interfaz UART*/
-#define CC26XX_UART_CONF_ENABLE				  0
+#define CC26XX_UART_CONF_ENABLE				  1
 /*---------------------------------------------------------------------------*/
 /*
  * Shrink the size of the uIP buffer, routing table and ND cache.

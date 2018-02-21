@@ -41,9 +41,9 @@
 #define MQTT_CLIENT_CONFIG_USER_ID_LEN 		   	32
 #define MQTT_CLIENT_CONFIG_AUTH_TOKEN_LEN    	32
 #define MQTT_CLIENT_CONFIG_EVENT_TYPE_ID_LEN 	32
-#define MQTT_CLIENT_CONFIG_SALA			      	4
-#define MQTT_CLIENT_CONFIG_MATERIAL_LEN        	6
-#define MQTT_CLIENT_CONFIG_CMD_TYPE_LEN       	8
+#define MQTT_CLIENT_CONFIG_SALA			      	   4
+#define MQTT_CLIENT_CONFIG_MATERIAL_LEN        6
+#define MQTT_CLIENT_CONFIG_CMD_TYPE_LEN        8
 #define MQTT_CLIENT_CONFIG_IP_ADDR_STR_LEN   	64
 /*---------------------------------------------------------------------------*/
 #define MQTT_CLIENT_PUBLISH_INTERVAL_MAX      86400 /* secs: 1 day */
@@ -68,7 +68,6 @@ typedef struct mqtt_client_config {
   int len;
 } mqtt_client_config_t;
 
-extern mqtt_client_config_t config_k;
 /*---------------------------------------------------------------------------*/
 #endif /* MQTT_CLIENT_H_ */
 /*---------------------------------------------------------------------------*/

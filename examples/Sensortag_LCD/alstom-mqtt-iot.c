@@ -58,11 +58,12 @@
 #include <Display/DisplayExt.h>
 /* Example GrLib image */
 #include "splash_image.h"
-Display_Handle hDisplayLcd;
-uint8_t line = 0;
 
+
+/* ===========LCD Variables=============*/
+Display_Handle hDisplayLcd;
+uint8_t LimiteSup = 0;
 /*---------------------------------------------------------------------------*/
-PROCESS_NAME(cetic_6lbr_client_process);
 PROCESS(alstom_mqtt_iot_process, "ALSTOM-MQTT-IOT");
 /*---------------------------------------------------------------------------*/
 /*
@@ -344,6 +345,7 @@ ping_parent(void)
 }
 /*---------------------------------------------------------------------------*/
 void cabecera_sensores_carga(){
+  LimiteSup = 0;
   Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
   Display_clear(hDisplayLcd);
   Display_print0(hDisplayLcd, 0, 1, "Sensors Values");
@@ -392,12 +394,15 @@ get_batmon_reading(void *data)
       buf = batmon_volt_reading.converted;
       memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
       snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d", (value * 125) >> 5);
-      Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
-      Display_print1(hDisplayLcd, 1, 8, "%dmV",(value*125) >> 5);
+      if(!LimiteSup){
+        Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+        Display_print1(hDisplayLcd, 1, 8, "%dmV",(value*125) >> 5);
+      }
       /* 
       * Si el valor de batería está por debajo de un valor límite, se publica de forma inmediata una alarma.
       */
       if((((value *125) >> 5) < batmon_volt_reading.limit) && batmon_volt_reading.limitOn){
+        LimiteSup=1;
         process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&batmon_volt_reading.type);
         Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
         Display_clear(hDisplayLcd);
@@ -457,16 +462,19 @@ get_bmp_reading()
       buf = bmp_pres_reading.converted;
       memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
       snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,value % 100);
-      Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
-      Display_print2(hDisplayLcd, 4, 6, "%d.%02dmPa", value / 100,value % 100);
+      if(!LimiteSup){
+        Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+        Display_print2(hDisplayLcd, 4, 6, "%d.%02dmPa", value / 100,value % 100);
+      }
       /* 
       * Si el valor de presion del sensor está por encima 
       * de un valor límite, se publica de forma inmediata una alarma.
       */
       if((value > bmp_pres_reading.limit) && bmp_pres_reading.limitOn){
+        LimiteSup=1;
         process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&bmp_pres_reading.type);
         Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
-    	Display_clear(hDisplayLcd);
+    	  Display_clear(hDisplayLcd);
         Display_print0(hDisplayLcd, 4, 4,"PRESION");
         Display_print0(hDisplayLcd,5,5,"LIMITE");
         Display_print0(hDisplayLcd,6,5,"SUPERADO");
@@ -526,13 +534,16 @@ get_tmp_reading()
     buf = tmp_amb_reading.converted;
     memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
     snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%03d", value / 1000,value % 1000);
-    Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
-    Display_print2(hDisplayLcd, 2, 8, "%d.%03dC", value / 1000,value % 1000);
+    if(!LimiteSup){
+      Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+      Display_print2(hDisplayLcd, 2, 8, "%d.%03dC", value / 1000,value % 1000);
+    }
     /* 
       * Si el valor de temperatura del sensor está por encima 
       * de un valor límite, se publica de forma inmediata una alarma.
     */ 
     if((value > tmp_amb_reading.limit) && tmp_amb_reading.limitOn){
+      LimiteSup=1;
       process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&tmp_amb_reading.type);
       Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
       Display_clear(hDisplayLcd);
@@ -553,13 +564,16 @@ get_tmp_reading()
     buf = tmp_obj_reading.converted;
     memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
     snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%03d", value / 1000,value % 1000);
-    Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
-    Display_print2(hDisplayLcd, 3, 8, "%d.%03dC", value / 1000,value % 1000);
+    if(!LimiteSup){
+      Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+      Display_print2(hDisplayLcd, 3, 8, "%d.%03dC", value / 1000,value % 1000);
+    }
     /* 
       * Si el valor de temperatura del sensor está por encima 
       * de un valor límite, se publica de forma inmediata una alarma.
     */
     if((value > tmp_amb_reading.limit) && tmp_amb_reading.limitOn){
+      LimiteSup=1;
       process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&tmp_obj_reading.type);
       Display_print0(hDisplayLcd, 4, 4,"TMP OBJ");
       Display_print0(hDisplayLcd,5,5,"LIMITE");
@@ -610,16 +624,19 @@ get_hdc_reading()
       buf = hdc_hum_reading.converted;
       memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
       snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,value % 100);
-      Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
-      Display_print2(hDisplayLcd, 5, 9, "%d.%02dRH", value / 100,value % 100);
+      if(!LimiteSup){
+        Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+        Display_print2(hDisplayLcd, 5, 9, "%d.%02dRH", value / 100,value % 100);
+      }
       /* 
       * Si el valor de humedad del sensor está por encima 
       * de un valor límite, se publica de forma inmediata una alarma.
       */
       if((value > hdc_hum_reading.limit) && hdc_hum_reading.limitOn){
+        LimiteSup=1;
         process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&hdc_hum_reading.type);
         Display_print0(hDisplayLcd, 4, 4,"HUMEDAD");
-     	Display_print0(hDisplayLcd,5,5,"LIMITE");
+     	  Display_print0(hDisplayLcd,5,5,"LIMITE");
       	Display_print0(hDisplayLcd,6,5,"SUPERADO");
       	etimer_set(&et, 10 * CLOCK_SECOND);
       }
@@ -645,13 +662,16 @@ get_light_reading()
     buf = opt_reading.converted;
     memset(buf, 0, ALSTOM_MQTT_IOT_CONVERTED_LEN);
     snprintf(buf, ALSTOM_MQTT_IOT_CONVERTED_LEN, "%d.%02d", value / 100,value % 100);
-    Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
-    Display_print2(hDisplayLcd, 6, 6, "%d.%02dlux", value / 100 ,value % 100);
+    if(!LimiteSup){
+      Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
+      Display_print2(hDisplayLcd, 6, 6, "%d.%02dlux", value / 100 ,value % 100);
+    }
     /* 
     * Si el valor de temperatura del sensor está por encima 
     * de un valor límite, se publica de forma inmediata una alarma.
     */  
     if((value > opt_reading.limit) && opt_reading.limitOn){
+      LimiteSup=1;
       process_post(PROCESS_BROADCAST, alstom_mqtt_iot_publish_event,&opt_reading.type);
       Display_print0(hDisplayLcd, 4, 3,"LUMINOSIDAD");
       Display_print0(hDisplayLcd,5,5,"LIMITE");
@@ -762,11 +782,7 @@ PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
   Display_clear(hDisplayLcd);
  
 
-  init_sensors(); 
-
-  Display_print0(hDisplayLcd, line, 0, "Sensores Inic");
-  clock_wait(CLOCK_SECOND/4);   
-  line = Display_move(hDisplayLcd,"Sensores Inic",line);                                                                                                        
+  init_sensors();                                                                                                        
                                                                                                                                    
   alstom_mqtt_iot_publish_event = process_alloc_event();
   alstom_mqtt_iot_config_loaded_event = process_alloc_event();
@@ -781,12 +797,7 @@ PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
    */
   alstom_mqtt_iot_config.def_rt_ping_interval = ALSTOM_MQTT_IOT_DEFAULT_RSSI_MEAS_INTERVAL;
 
-  load_config(); 
-
-  Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
-  Display_print0(hDisplayLcd, line, 0, "Cargada Config");
-  clock_wait(CLOCK_SECOND/4);   
-  line = Display_move(hDisplayLcd,"Cargada Config",line);                                                                                                            
+  load_config();                                                                                                         
  
   /*
    * Notify all other processes (basically the ones in this demo) that the
@@ -794,15 +805,8 @@ PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
    */
   process_post(PROCESS_BROADCAST, alstom_mqtt_iot_config_loaded_event, NULL);
 
-  init_sensor_readings();
+  init_sensor_readings();                                                                                                          
 
-
-  
-  Display_print0(hDisplayLcd, line, 0, "Lecturas Inic");
-  clock_wait(CLOCK_SECOND/4);   
-  line = Display_move(hDisplayLcd,"Lecturas Inic",line);                                                                                                            
- 
-  
   def_rt_rssi = 0x8000000;
   uip_icmp6_echo_reply_callback_add(&echo_reply_notification,echo_reply_handler);
   etimer_set(&echo_request_timer, ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC);
@@ -821,7 +825,6 @@ PROCESS_THREAD(alstom_mqtt_iot_process, ev, data)
         cargada_cabecera = 0;
         Display_control(hDisplayLcd, DISPLAY_CMD_TRANSPORT_OPEN, NULL);
         Display_clear(hDisplayLcd);
-        line = 0;
         Display_print0(hDisplayLcd, 1, 0, "Conectando.");
         clock_wait(CLOCK_SECOND/4); 
         Display_print0(hDisplayLcd, 1, 11, ".");

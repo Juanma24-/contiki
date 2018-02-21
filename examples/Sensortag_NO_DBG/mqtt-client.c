@@ -140,7 +140,7 @@ static char sub_topic_Info[BUFFER_SIZE];
 *	Variables locales
 */
 static char client_id[BUFFER_SIZE];
-static uint8_t *alarmOnp;			//TODO: Juntar en 1 estas dos variables
+static uint8_t *alarmOnp;
 static uint8_t alarmOn=10;
 static uint8_t Info=0;
 /*---------------------------------------------------------------------------*/
@@ -170,9 +170,7 @@ extern int def_rt_rssi;
 static alstom_mqtt_iot_sensor_reading_t *reading;
 /*---------------------------------------------------------------------------*/
 /*Estructura con los datos a guardar/cargar de los sensores*/
-mqtt_client_config_t *conf;											//TODO: Unir ambas variables
-/*Estructura con el material al que está subscripto el Sensortag */
-mqtt_client_config_t config_k;
+mqtt_client_config_t *conf;
 /*---------------------------------------------------------------------------*/
 /* 
  * Bandera que indica el topic al que debe subscribirse el dispositivo. Es 
@@ -199,12 +197,9 @@ load_mqtt_config()
 {
   /* Read from flash into a temp buffer */
   mqtt_client_config_t tmp_cfg;
-  printf("Cargando configuracion de la memoria Flash\n");
   int rv = ext_flash_open();
-  int i;
 
   if(!rv) {
-    printf("Could not open flash to load config\n");
     ext_flash_close();
     return;
   }
@@ -214,18 +209,13 @@ load_mqtt_config()
   ext_flash_close();
 
   if(!rv) {
-    printf("Error loading config\n");
     return;
   }
   if(tmp_cfg.magic == CONFIG_MAGIC && tmp_cfg.len == sizeof(tmp_cfg)) {
-    memcpy(&config_k, &tmp_cfg, sizeof(mqtt_client_config_t));
-    printf("Variable temporal copiada config_k, coincide len y MAGIC\n");
+    memcpy(conf, &tmp_cfg, sizeof(mqtt_client_config_t));
   }else{
     return;
   }
-  for(i=0;i<strlen(conf->material);i++){
-      conf->material[i]=config_k.material[i];
-    }
 }
 /*---------------------------------------------------------------------------*/
 /*
@@ -236,11 +226,9 @@ save_mqtt_config()
 {
   /* Dump current running config to flash */
   int rv;
-  int i;
   rv = ext_flash_open();
 
   if(!rv) {
-    printf("Could not open flash to save config\n");
     ext_flash_close();
     return;
   }
@@ -248,16 +236,9 @@ save_mqtt_config()
   rv = ext_flash_erase(CONFIG_FLASH_OFFSET + sizeof(alstom_mqtt_iot_config_t),sizeof(mqtt_client_config_t));
 
   if(!rv) {
-    printf("Error erasing flash\n");
   } else {
-    config_k.magic = CONFIG_MAGIC;
-    config_k.len = sizeof(mqtt_client_config_t);
-    for(i=0;i<strlen(conf->material);i++){
-      config_k.material[i] = conf->material[i];
-    }
-    rv = ext_flash_write(CONFIG_FLASH_OFFSET + sizeof(alstom_mqtt_iot_config_t),sizeof(mqtt_client_config_t),(uint8_t *)&config_k);
+    rv = ext_flash_write(CONFIG_FLASH_OFFSET + sizeof(alstom_mqtt_iot_config_t),sizeof(mqtt_client_config_t),(uint8_t *)conf);
     if(!rv) {
-      printf("Error saving config\n");
     }
   }
 
@@ -277,21 +258,18 @@ static void
 pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
             uint16_t chunk_len)
 {
-  DBG("Pub Handler: topic='%s' (len=%u), chunk_len=%u\n", topic, topic_len,chunk_len);
 
   /* Se comprueba la longitud del topic y del mensaje para comprobar si coinciden
   con los esperados ya que siempre la longitud es fija*/
   /* If we don't like the length, ignore */
   if((chunk_len != 1)||(topic_len!=14)) {
-    	printf("Incorrect topic or chunk len. Ignored\n");
     	return;
   }
 
   /* Si el topic no coincide con la operacion asignada al Sensortag
   se ignora. Es muy importante ya que en caso contrario se activaría en todas
   las operaciones*/ 
-  if(strncmp(&topic[4], conf->material, 5) == 0) {				//Si las cadenas no son iguales
-    printf("Corresponde con el topic %s\n", conf->material);   
+  if(strncmp(&topic[4], conf->material, 5) == 0) {				//Si las cadenas no son iguales  
   /*
   * En caso de que el dispositivo estuviera suscrito a más de una operación este
   * es el lugar dónde se deben colocar los elseif de comprobación, al igual que el
@@ -299,7 +277,6 @@ pub_handler_Act(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   */
   }
   else{
-    printf("Incorrect format\n");
     return;
   }
   /*Comprueba que el topic termina en leds importante si 
@@ -334,19 +311,15 @@ pub_handler_ConfA(const char *topic, uint16_t topic_len, const uint8_t *chunk,
             uint16_t chunk_len)
 {
   int i;
-  DBG("Pub Handler: topic='%s' (len=%u), chunk_len=%u\n", topic, topic_len,chunk_len);
-
     /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
     con los esperados
     If we don't like the length, ignore*/ 
   if((chunk_len != 5)||(topic_len!=23)) {
-    	printf("Incorrect topic or chunk len. Ignored\n");
     	return;
   }
 
   /* Se comprueba si el mensaje iba para este Sensortag comprobando que coinciden los client_ID*/ 
   if(strncmp(&topic[4], client_id, 14) != 0) {	
-    printf("Incorrect format\n");
     return;
   }
   /*SEGURIDAD:se comprueba que el topic termina en Conf. Permite añadir topics en el mismo nivel*/
@@ -371,19 +344,15 @@ static void
 pub_handler_Info(const char *topic, uint16_t topic_len, const uint8_t *chunk,
             uint16_t chunk_len)
 {
-  DBG("Pub Handler: topic='%s' (len=%u), chunk_len=%u\n", topic, topic_len,chunk_len);
-
-    /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
+  /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
     con los esperados
     If we don't like the length, ignore*/ 
   if((chunk_len != 1)||(topic_len!=23)) {
-      printf("Incorrect topic or chunk len. Ignored\n");
       return;
   }
 
   /* Se comprueba si el mensaje iba para este Sensortag comprobando que coinciden los client_ID*/ 
   if(strncmp(&topic[4], client_id, 14) != 0) {        //Si las cadenas no son iguales
-    printf("Incorrect format\n");
     return;
   }
   /*SEGURIDAD:se comprueba que el topic termina en Conf. Permite añadir topics en el mismo nivel*/
@@ -406,39 +375,31 @@ static void
 pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
             uint16_t chunk_len)
 {
-
-  DBG("Pub Handler: topic='%s' (len=%u), chunk_len=%u\n", topic, topic_len,chunk_len);
-
-    /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
-    con los esperados
-    If we don't like the length, ignore*/ 
+  /* Se comprueba la longitud del topic y del mensaje para comprobar si coninciden
+     con los esperados
+     If we don't like the length, ignore*/ 
   if(topic_len < 26) {
-      printf("Incorrect topic or chunk len. Ignored\n");
       return;
   }
 
   /* Se comprueba si el mensaje iba para este Sensortag comprobando que coinciden los client_ID*/ 
   if(strncmp(&topic[4], client_id, 14) != 0) {        //Si las cadenas no son iguales
-    printf("Incorrect format\n");
     return;
   }
   /*Modificación de la PUBLICACIÓN.*/
   if(strncmp(&topic[topic_len - 3],"Pub",3) == 0){
      for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {										//Recorre la lista de sensores
         if(strncmp(&topic[topic_len - 4 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){		//Si coincide el campo form_field
-          DBG("Match en sensor\n");
-          if(chunk[0] == '0') {																										//Si se ha mandado un 0
-            reading->publish = 0;																									//Se desactiva la propiedad Publish
-            snprintf(reading->converted, ALSTOM_MQTT_IOT_CONVERTED_LEN, "\"N/A\"");												    //Se modifica la propiedad Converted
-            DBG("Desactivada publicación de %s\n",reading->form_field);
-            save_config();																											//Se guarda la nueva configuración en FLASH
+          if(chunk[0] == '0') {																										            //Si se ha mandado un 0
+            reading->publish = 0;																									            //Se desactiva la propiedad Publish
+            snprintf(reading->converted, ALSTOM_MQTT_IOT_CONVERTED_LEN, "\"N/A\"");						//Se modifica la propiedad Converted
+            save_config();																											              //Se guarda la nueva configuración en FLASH
             return;
-          } else if(chunk[0] == '1') {																								//Si se ha mandado un 1
-            reading->publish = 1;																									//Se activa la propiedad Publish
-            init_sensor_readings();																									//Inicia las lecturas (Activa la nueva configuración)
-            DBG("Activada publicación de %s\n",reading->form_field);
-            save_config();																											//Se guarda la nueva configuración en FLASH
-            process_poll(&mqtt_client_process);																						//Se envía un evento al proceso mqtt (state_machine activa<)
+          } else if(chunk[0] == '1') {																								        //Si se ha mandado un 1
+            reading->publish = 1;																									            //Se activa la propiedad Publish
+            init_sensor_readings();																									          //Inicia las lecturas (Activa la nueva configuración)
+            save_config();																											              //Se guarda la nueva configuración en FLASH
+            process_poll(&mqtt_client_process);																						    //Se envía un evento al proceso mqtt (state_machine activa<)
             return;
           }
         }   
@@ -450,7 +411,6 @@ pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
      for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
         if(strncmp(&topic[topic_len - 4 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
           reading->interval = atoi((const char*)chunk);
-          DBG("Modificado Intervalo de %s. Nuevo intervalo:%lu\n",reading->form_field,reading->interval);
           init_sensor_readings();
           save_config();
           process_poll(&mqtt_client_process);
@@ -465,7 +425,6 @@ pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
         if(strncmp(&topic[topic_len - 4 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
           reading->limit = atoi((const char*)chunk);
           save_config();
-          DBG("Modificado Límite de %s. Nuevo Límite:%lu\n",reading->form_field,reading->limit);
           return;
         }   
       }
@@ -473,24 +432,20 @@ pub_handler_ConfP(const char *topic, uint16_t topic_len, const uint8_t *chunk,
   }
   /*Modificación de los LÍMITES ACTIVOS*/
   if(strncmp(&topic[topic_len - 5],"LimOn",5) == 0){
-     for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
-        if(strncmp(&topic[topic_len - 6 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
-          if(chunk[0] == '0') {
-            reading->limitOn = 0;
-            DBG("Desactivada Alarma de límite en publicación de %s\n",reading->form_field);
-            save_config();
-            return;
-          } else if(chunk[0] == '1') {
-            reading->limitOn = 1;
-            init_sensor_readings();
-            DBG("Activada Alarma de límite en publicación de %s\n",reading->form_field);
-            save_config();
-            return;
-          }
-        }   
-      }
-      return;
+    for(reading = alstom_mqtt_iot_sensor_first();reading != NULL; reading = reading->next) {
+      if(strncmp(&topic[topic_len - 6 - strlen(reading->form_field)],reading->form_field,strlen(reading->form_field) ) == 0){
+        if(chunk[0] == '0') {
+          reading->limitOn = 0;
+          save_config();
+        } else if(chunk[0] == '1') {
+          reading->limitOn = 1;
+          save_config();
+          init_sensor_readings();
+        }
+      }   
+    }
   }
+  return;
 }
 /*---------------------------------------------------------------------------*/
 /*
@@ -504,15 +459,12 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
   switch(event) {
   /*Conexion cliente/Broker realizada*/
   case MQTT_EVENT_CONNECTED: {
-    DBG("APP - Application has a MQTT connection\n");
     timer_set(&connection_life, CONNECTION_STABLE_TIME);
     state = MQTT_CLIENT_STATE_CONNECTED;
     break;
   }
   /*Cliente desconectado*/
   case MQTT_EVENT_DISCONNECTED: {
-    DBG("APP - MQTT Disconnect. Reason %u\n", *((mqtt_event_t *)data));
-
     /* Do nothing if the disconnect was the result of an incoming config */
     if(state != MQTT_CLIENT_STATE_NEWCONFIG) {
       state = MQTT_CLIENT_STATE_DISCONNECTED;
@@ -527,39 +479,37 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
     /* Implement first_flag in publish message? */
     if(msg_ptr->first_chunk) {
       msg_ptr->first_chunk = 0;
-      DBG("APP - Application received a publish on topic '%s'. Payload "
-          "size is %i bytes. Content:\n\n",
-          msg_ptr->topic, msg_ptr->payload_length);
     }
     /* 
     * Topics de Actuación (longitud==14)
     */
     if(strlen(msg_ptr->topic) == 14){
-    	pub_handler_Act(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
-                msg_ptr->payload_length);
+    	pub_handler_Act(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,msg_ptr->payload_length);
+      break;
     }
     /*
     * Topics de Configuración e Información (Longitud==23)
     */ 
     if(strlen(msg_ptr->topic) == 23){
       if(strncmp(&msg_ptr->topic[strlen(msg_ptr->topic) - 4],"Conf",4) == 0){
-    	 pub_handler_ConfA(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,msg_ptr->payload_length);
+    	  pub_handler_ConfA(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,msg_ptr->payload_length);
+        break;
       }else if(strncmp(&msg_ptr->topic[strlen(msg_ptr->topic) - 4],"Info",4) == 0){
         pub_handler_Info(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,msg_ptr->payload_length);
+        break;
       }
     }
     /*
     * Topics de Configuracion de publicación de datos de sensores. Longitud Variable
     */
     if(strlen(msg_ptr->topic) > 27){
-      pub_handler_ConfP(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,
-                msg_ptr->payload_length);
+      pub_handler_ConfP(msg_ptr->topic, strlen(msg_ptr->topic), msg_ptr->payload_chunk,msg_ptr->payload_length);
+      break;
     }
     break;
   }
   /*Subscripcion a topic realizada con éxito*/
   case MQTT_EVENT_SUBACK: {
-    DBG("APP - Application is subscribed to topic successfully\n");
     /*
     * Cada vez que se realiza una subscripción con éxito esta bandera aumenta en 1.
     * Esto permite realizar la siguiente subscripción. Así hasta que la bandera supere
@@ -570,16 +520,13 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
   }
   /*Des-subscripcion realizada con éxito*/
   case MQTT_EVENT_UNSUBACK: {
-    DBG("APP - Application is unsubscribed to topic successfully\n");
     break;
   }
   /*Publicacion completada*/
   case MQTT_EVENT_PUBACK: {
-    DBG("APP - Publishing complete.\n");
     break;
   }
   default:
-    DBG("APP - Application got a unhandled MQTT event: %i\n", event);
     break;
   }
 }
@@ -592,28 +539,22 @@ mqtt_event(struct mqtt_connection *m, mqtt_event_t event, void *data)
 static int
 construct_pub_topic(void)
 {
-  int len = snprintf(pub_topic, BUFFER_SIZE, "%s/%s/%s/fmt/json",
-                     conf->sala,client_id,conf->event_type_id);
+  int len = snprintf(pub_topic, BUFFER_SIZE, "%s/%s/%s/fmt/json",conf->sala,client_id,conf->event_type_id);
 
   /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
   if(len < 0 || len >= BUFFER_SIZE) {
-    printf("Pub Topic: %d, Buffer %d\n", len, BUFFER_SIZE);
     return 0;
   }
-  int lena = snprintf(alarm_topic, BUFFER_SIZE, "%s/%s/alarm/SenOff",
-                     conf->sala,client_id);
+  int lena = snprintf(alarm_topic, BUFFER_SIZE, "%s/%s/alarm/SenOff",conf->sala,client_id);
 
   /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
   if(lena < 0 || lena >= BUFFER_SIZE) {
-    printf("Pub Topic: %d, Buffer %d\n", lena, BUFFER_SIZE);
     return 0;
   }
-  int leni = snprintf(info_topic, BUFFER_SIZE, "%s/%s/info/fmt/json",
-                     conf->sala,client_id);
+  int leni = snprintf(info_topic, BUFFER_SIZE, "%s/%s/info/fmt/json",conf->sala,client_id);
 
   /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
   if(leni < 0 || leni >= BUFFER_SIZE) {
-    printf("Pub Topic: %d, Buffer %d\n", leni, BUFFER_SIZE);
     return 0;
   }
   return 1;
@@ -631,31 +572,23 @@ construct_sub_topic(void)
 {
   /*Construción topics de Actuación*/
   int len = snprintf(sub_topic_Act, BUFFER_SIZE, "%s/%s/%s",conf->sala,conf->material,conf->cmd_type);
-  DBG("Creado topic: %s/%s/%s\n",conf->sala,conf->material,conf->cmd_type);
   /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
   if(len < 0 || len >= BUFFER_SIZE) {
-    printf("Sub Topic: %d, Buffer %d\n", len, BUFFER_SIZE);
     return 0;
   }
   /*Construcción topics de configuración Actuación*/
   int lenca = snprintf(sub_topic_ConfA,BUFFER_SIZE,"%s/%s/Conf",conf->sala,client_id);
-  DBG("Creado topic: %s/%s/Conf\n",conf->sala,client_id);
   if(lenca < 0 || lenca >= BUFFER_SIZE) {
-    printf("Sub Topic: %d, Buffer %d\n", lenca, BUFFER_SIZE);
     return 0;
   }
   /*Construcción topics de petición Info*/
   int leni = snprintf(sub_topic_Info,BUFFER_SIZE,"%s/%s/Info",conf->sala,client_id);
-  DBG("Creado topic: %s/%s/Info\n",conf->sala,client_id);
   if(leni < 0 || leni >= BUFFER_SIZE) {
-    printf("Sub Topic: %d, Buffer %d\n", leni, BUFFER_SIZE);
     return 0;
   }
   /*Construcción topics de configuración Publicación*/
   int lencp = snprintf(sub_topic_ConfP,BUFFER_SIZE,"%s/%s/%s/%s",conf->sala,client_id,conf->cmd_type,conf->cmd_type);
-  DBG("Creado topic: %s/%s/%s/%s\n",conf->sala,client_id,conf->cmd_type,conf->cmd_type);
   if(lencp < 0 || lencp >= BUFFER_SIZE) {
-    printf("Sub Topic: %d, Buffer %d\n", lencp, BUFFER_SIZE);
     return 0;
   }
   return 1;
@@ -677,7 +610,6 @@ construct_client_id(void)
 
   /* len < 0: Error. Len >= BUFFER_SIZE: Buffer too small */
   if(len < 0 || len >= BUFFER_SIZE) {
-    printf("Client ID: %d, Buffer %d\n", len, BUFFER_SIZE);
     return 0;
   }
 
@@ -740,6 +672,7 @@ static int
 init_config()
 {
   memset(conf, 0, sizeof(mqtt_client_config_t));
+
   memcpy(conf->event_type_id, ALSTOM_MQTT_IOT_DEFAULT_EVENT_TYPE_ID, 7);
   memcpy(conf->broker_ip, broker_ip, strlen(broker_ip));
   memcpy(conf->cmd_type, ALSTOM_MQTT_IOT_DEFAULT_SUBSCRIBE_CMD_TYPE, 1);
@@ -747,9 +680,10 @@ init_config()
   memcpy(conf->auth_token, ALSTOM_MQTT_IOT_DEFAULT_AUTH_TOKEN, 20);
   memcpy(conf->material,ALSTOM_MQTT_IOT_DEFAULT_MATERIAL,5);
   memcpy(conf->sala,ALSTOM_MQTT_IOT_DEFAULT_SALA,3);
+  conf->magic = CONFIG_MAGIC;
   conf->broker_port = ALSTOM_MQTT_IOT_DEFAULT_BROKER_PORT;
   conf->pub_interval = ALSTOM_MQTT_IOT_DEFAULT_PUBLISH_INTERVAL;
-
+  conf->len = sizeof(mqtt_client_config_t);
   return 1;
 }
 
@@ -766,38 +700,21 @@ static void
 subscribe()
 {
   /* Publish MQTT topic in IBM quickstart format */
-  mqtt_status_t status;
   switch (flag_sub_topic){
     case 0:{
-      DBG("APP - Subscribing!\n");
-      status = mqtt_subscribe(&conn, NULL, sub_topic_Act, MQTT_QOS_LEVEL_1);
-      if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
-        DBG("APP - Tried to subscribe but command queue was full!\n");
-      }
+      mqtt_subscribe(&conn, NULL, sub_topic_Act, MQTT_QOS_LEVEL_1);
       break;
     }
     case 1:{
-      DBG("APP - Subscribing!\n");
-      status = mqtt_subscribe(&conn, NULL, sub_topic_ConfA, MQTT_QOS_LEVEL_1);
-      if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
-        DBG("APP - Tried to subscribe but command queue was full!\n");
-      }   
+      mqtt_subscribe(&conn, NULL, sub_topic_ConfA, MQTT_QOS_LEVEL_1);  
       break;
     }
     case 2:{
-      DBG("APP - Subscribing!\n");
-      status = mqtt_subscribe(&conn, NULL, sub_topic_ConfP, MQTT_QOS_LEVEL_1);
-      if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
-        DBG("APP - Tried to subscribe but command queue was full!\n");
-      }   
+      mqtt_subscribe(&conn, NULL, sub_topic_ConfP, MQTT_QOS_LEVEL_1);  
       break;
     }
     case 3:{
-      DBG("APP - Subscribing!\n");
-      status = mqtt_subscribe(&conn, NULL, sub_topic_Info, MQTT_QOS_LEVEL_1);
-      if(status == MQTT_STATUS_OUT_QUEUE_FULL) {
-        DBG("APP - Tried to subscribe but command queue was full!\n");
-      }   
+      mqtt_subscribe(&conn, NULL, sub_topic_Info, MQTT_QOS_LEVEL_1);   
       break;
     }
     default:
@@ -832,7 +749,6 @@ publish(void)
                  client_id, seq_nr_value, clock_seconds());                                      //GUARDA EN BUFFER LOS DATOS DEL SENSORTAG
 
   if(len < 0 || len >= remaining) {
-    printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
     return;
   }
 
@@ -848,7 +764,6 @@ publish(void)
                  def_rt_str, def_rt_rssi);
 
   if(len < 0 || len >= remaining) {
-    printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
     return;
   }
   remaining -= len;
@@ -865,13 +780,11 @@ publish(void)
       if(reading->changed == 1){
         len = snprintf(buf_ptr, remaining,",\"%s (%s)\":%s", reading->descr, reading->units,reading->converted);                                                           //LECTURAS DE SENSORES
         if(len < 0 || len >= remaining) {
-          printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
           return;
         }
         remaining -= len;
         buf_ptr += len;
         reading->changed = 0;
-        DBG("%s publicado, changed: %d \n",reading->form_field,reading->changed);
       }
     }
   }
@@ -879,14 +792,12 @@ publish(void)
   len = snprintf(buf_ptr, remaining, "}}");
 
   if(len < 0 || len >= remaining) {
-    printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
     return;
   }
 
   mqtt_publish(&conn, NULL, pub_topic, (uint8_t *)app_buffer,
                strlen(app_buffer), MQTT_QOS_LEVEL_0, MQTT_RETAIN_OFF);                                //PUBLICA
                                                                                                       //IMP:SIN RETENCION Y POR LO TANTO QoS==0
-  DBG("APP - Publish!\n");
 }
 /*---------------------------------------------------------------------------*/
 /*
@@ -928,7 +839,6 @@ publish_info(void)
                  def_rt_str, def_rt_rssi);
 
   if(len < 0 || len >= remaining) {
-    printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
     return;
   }
   remaining -= len;
@@ -939,7 +849,6 @@ publish_info(void)
   len = snprintf(buf_ptr, remaining, ",\"Material\":\"%s\"",conf->material);
 
   if(len < 0 || len >= remaining) {
-    printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
     return;
   }
   remaining -= len;
@@ -953,9 +862,7 @@ publish_info(void)
                                         "\"Limit\":%lu"
                                         "}",
                                         reading->descr, reading->publish,reading->interval,reading->limitOn,reading->limit);
-    printf("Sensor añadido al mensaje de informacion: %d\n",reading->type);
     if(len < 0 || len >= remaining) {
-      printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
       return;
     }
     remaining -= len;
@@ -965,14 +872,12 @@ publish_info(void)
   len = snprintf(buf_ptr, remaining, "}}");
 
   if(len < 0 || len >= remaining) {
-    printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
     return;
   }
 
   mqtt_publish(&conn, NULL, info_topic, (uint8_t *)app_buffer,
                strlen(app_buffer), MQTT_QOS_LEVEL_0, MQTT_RETAIN_OFF);                                //PUBLICA
                                                                                                       //IMP:SIN RETENCION Y POR LO TANTO QoS==0
-  DBG("APP - Publish!\n");
 }
 /*---------------------------------------------------------------------------*/
 /*
@@ -983,7 +888,6 @@ publish_info(void)
 static void
 alarm(uint8_t type)
 {
-  DBG("Ha entrado en la publicación de alarma, %d\n",type);
   int len;
   int remaining = APP_BUFFER_SIZE;
   char def_rt_str[64];
@@ -1001,7 +905,6 @@ alarm(uint8_t type)
                  client_id, seq_nr_value, clock_seconds());                                      //GUARDA EN BUFFER LOS DATOS DEL SENSORTAG
 
   if(len < 0 || len >= remaining) {
-    printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
     return;
   }
 
@@ -1017,7 +920,6 @@ alarm(uint8_t type)
                  def_rt_str, def_rt_rssi);
 
   if(len < 0 || len >= remaining) {
-    printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
     return;
   }
   remaining -= len;
@@ -1064,7 +966,6 @@ alarm(uint8_t type)
     }
     case 9:{
       len = snprintf(buf_ptr, remaining, ",\"Alarma\":\"Button:Se_ha_pulsado_el_boton\"");
-      DBG("Añadido a buffer, boton pulsado\n");
       break;
     }
 
@@ -1075,7 +976,6 @@ alarm(uint8_t type)
   }
   
   if(len < 0 || len >= remaining) {
-    printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
     return;
   }
   remaining -= len;
@@ -1084,13 +984,11 @@ alarm(uint8_t type)
   len = snprintf(buf_ptr, remaining, "}}");
 
   if(len < 0 || len >= remaining) {
-    printf("Buffer too short. Have %d, need %d + \\0\n", remaining, len);
     return;
   }
 
   mqtt_publish(&conn, NULL, alarm_topic, (uint8_t *)app_buffer,strlen(app_buffer), MQTT_QOS_LEVEL_0, MQTT_RETAIN_OFF);                                
                                                                                                       
-  DBG("APP - Publish!\n");
 }
 /*---------------------------------------------------------------------------*/
 
@@ -1101,8 +999,7 @@ static void
 connect_to_broker(void)                                                                   
 {
   /* Connect to MQTT server */
-  mqtt_connect(&conn, conf->broker_ip, conf->broker_port,
-               conf->pub_interval * 3);
+  mqtt_connect(&conn, conf->broker_ip, conf->broker_port,conf->pub_interval * 3);
 
   state = MQTT_CLIENT_STATE_CONNECTING;
 }
@@ -1120,31 +1017,25 @@ state_machine(void)
   */  
   case MQTT_CLIENT_STATE_INIT:
     /* If we have just been configured register MQTT connection */
-    mqtt_register(&conn, &mqtt_client_process, client_id, mqtt_event,
-                  MQTT_CLIENT_MAX_SEGMENT_SIZE);
+    mqtt_register(&conn, &mqtt_client_process, client_id, mqtt_event,MQTT_CLIENT_MAX_SEGMENT_SIZE);
 
       if(strlen(conf->auth_token) == 0) {                                                 
-        printf("User name set, but empty auth token\n");
         state = MQTT_CLIENT_STATE_ERROR;
         break;
-      } else {                                                                            //SI AUTH_TOKEN != 0 
-        mqtt_set_username_password(&conn, conf->user_id,                                  //FIJA EL USUARIO DE LA CONEXIÓN
-                                   conf->auth_token);                                     //FIJA LA CONTRASEÑA DE LA CONEXIÓN
+      } else {                                                                            
+        mqtt_set_username_password(&conn, conf->user_id,conf->auth_token);                                   
       }
     
 
     /* _register() will set auto_reconnect. We don't want that. */
     conn.auto_reconnect = 0;
     connect_attempt = 1;
-
     /*
      * Wipe out the default route so we'll republish it every time we switch to
      * a new broker
      */
     memset(&def_route, 0, sizeof(def_route));
-
     state = MQTT_CLIENT_STATE_REGISTERED;
-    DBG("Init\n");
     /* Continue */
   /*
   * Conexión al Broker tras registro del cliente, el paso a CONNECTING lo hace la función connect_to_broker
@@ -1152,7 +1043,6 @@ state_machine(void)
   case MQTT_CLIENT_STATE_REGISTERED:
     if(uip_ds6_get_global(ADDR_PREFERRED) != NULL) {
       /* Registered and with a public IP. Connect */
-      DBG("Registered. Connect attempt %u\n", connect_attempt);
       connect_to_broker();
     }
     etimer_set(&publish_periodic_timer, ALSTOM_MQTT_IOT_NET_CONNECT_PERIODIC);
@@ -1163,7 +1053,6 @@ state_machine(void)
     leds_on(ALSTOM_MQTT_IOT_STATUS_LED);
     ctimer_set(&ct, CONNECTING_LED_DURATION, publish_led_off, NULL);
     /* Not connected yet. Wait */
-    DBG("Connecting (%u)\n", connect_attempt);
     break;
   /*
   *Cliente conectado a Broker con éxito, es disparado por mqtt_event
@@ -1209,19 +1098,16 @@ state_machine(void)
           leds_on(ALSTOM_MQTT_IOT_STATUS_LED);                                  //Enciende LED verde
           ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL); 
           alarm(alarmOn);
-          DBG("Publicando alarma %d\n",alarmOn);
           alarmOn = 10; 
         }else if(Info==1){
           leds_on(ALSTOM_MQTT_IOT_STATUS_LED);                                  //Enciende LED verde
           ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL);
           publish_info();
-          DBG("Publicado topic de informacion %d\n",Info);
           Info=0;
         }else{
           leds_on(ALSTOM_MQTT_IOT_STATUS_LED);                                  //Enciende LED verde
           ctimer_set(&ct, PUBLISH_LED_ON_DURATION, publish_led_off, NULL);
           publish();
-          DBG("Publicando valores de sensores\n");
           /*
           * Tras la publicación, se chequea la lista de sensores y se modifica el valor changed. Así solo
           * se publicarán aquellos valores que hayan sido modificados.
@@ -1261,7 +1147,6 @@ state_machine(void)
     break;
   /*Estado de desconexión*/
   case MQTT_CLIENT_STATE_DISCONNECTED:
-    DBG("Disconnected\n");
     /*Si no se han superado los intentos de conexión máximos (o son infinitos)*/
     if(connect_attempt < RECONNECT_ATTEMPTS ||RECONNECT_ATTEMPTS == RETRY_FOREVER) {
       /* Disconnect and backoff */
@@ -1271,9 +1156,6 @@ state_machine(void)
 
       /*Aumenta el intervalo de reconexion dependiendo el numero de intentos realizados*/
       interval = connect_attempt < 3 ? RECONNECT_INTERVAL << connect_attempt :RECONNECT_INTERVAL << 3;
-
-      DBG("Disconnected. Attempt %u in %lu ticks\n", connect_attempt, interval);
-
       etimer_set(&publish_periodic_timer, interval);
 
       state = MQTT_CLIENT_STATE_REGISTERED;
@@ -1281,7 +1163,6 @@ state_machine(void)
     } else {
       /* Max reconnect attempts reached. Enter error state */
       state = MQTT_CLIENT_STATE_ERROR;
-      DBG("Aborting connection after %u attempts\n", connect_attempt - 1);
     }
     break;
   /*Modifica la configración actualizandola y reiniciando la conexion del cliente con el broker*/
@@ -1289,15 +1170,12 @@ state_machine(void)
     /* Only update config after we have disconnected */
     if(conn.state == MQTT_CONN_STATE_NOT_CONNECTED) {
       update_config();
-      DBG("New config\n");
-
       /* update_config() scheduled next pass. Return */
       return;
     }
     break;
   case MQTT_CLIENT_STATE_CONFIG_ERROR:
     /* Idle away. The only way out is a new config */
-    printf("Bad configuration.\n");
     return;
   case MQTT_CLIENT_STATE_ERROR:
   default:
@@ -1308,7 +1186,6 @@ state_machine(void)
      * If we enter here it's because of some error. Stop timers. The only thing
      * that can bring us out is a new config event
      */
-    printf("Default case: State=0x%02x\n", state);
     return;
   }
 
@@ -1321,7 +1198,6 @@ PROCESS_THREAD(mqtt_client_process, ev, data)
 
   PROCESS_BEGIN();
 
-  printf("CC26XX MQTT Client Process\n");
   conf = &alstom_mqtt_iot_config.mqtt_config;          	//Carga la configuración 
   if(init_config() != 1) {                             	//Ejecuta init_config, cargando la estructura de configuración del cliente
     PROCESS_EXIT();
