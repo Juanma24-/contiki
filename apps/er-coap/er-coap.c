@@ -506,9 +506,6 @@ coap_parse_message(void *packet, uint8_t *data, uint16_t data_len)
 
     option_number += option_delta;
 
-<<<<<<< HEAD
-    PRINTF("OPTION %u (delta %u, len %u): ", option_number, option_delta,
-=======
     if(option_number > COAP_OPTION_SIZE1) {
       /* Malformed CoAP - out of bounds */
       PRINTF("BAD REQUEST: option number too large: %u\n", option_number);
@@ -516,7 +513,6 @@ coap_parse_message(void *packet, uint8_t *data, uint16_t data_len)
     }
 
     PRINTF("OPTION %u (delta %u, len %zu): ", option_number, option_delta,
->>>>>>> upstream/master
            option_length);
 
     SET_OPTION(coap_pkt, option_number);
